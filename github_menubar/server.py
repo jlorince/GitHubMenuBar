@@ -64,7 +64,7 @@ def main():
     @app.route("/clear_notification")
     def clear_notification():
         """unmute a pr"""
-        app.client.clear_notification(int(request.args.get("notif")))
+        app.client.clear_notification(request.args.get("notif"))
         return redirect(request.args.get("redirect"))
 
     @app.route("/refresh")

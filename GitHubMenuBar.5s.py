@@ -13,9 +13,8 @@ PID_FILE = CONFIG["pid_file"]
 
 
 def startProcess():
-    # TODO - use a regex here to handle `python3` case
     process = subprocess.Popen(
-        [sys.executable.replace("python", "gmb-server")], env=os.environ.copy()
+        [f"{sys.executable.rsplit('/', 1)[0]}/gmb-server"], env=os.environ.copy()
     )
     # Write PID file
     with open(PID_FILE, "w") as fi:

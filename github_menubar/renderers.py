@@ -101,8 +101,8 @@ class BitBarRenderer(Renderer):
     def _build_notification_pr_table(self):
         rows = []
         ids = []
-
-        for notification in self.state["notifications"].values():
+        notif_ids = []
+        for notif_id, notification in self.state["notifications"].items():
             if not notification["cleared"]:
                 if notification["url"] in self._pr_urls:
                     pr = self._pr_urls[notification["url"]]
@@ -115,11 +115,13 @@ class BitBarRenderer(Renderer):
                         ]
                     )
                     ids.append(pr["id"])
+                    notif_ids.append(notif_id)
         return (
             tabulate(
                 rows, headers=["PR", "author", "state", ""], tablefmt="plain"
             ).split("\n"),
             ids,
+            notif_ids
         )
 
     def _colorize_pr(self, pull_request):
@@ -330,17 +332,17 @@ class BitBarRenderer(Renderer):
             if len(self.state["pull_requests"]) == 0:
                 self._printer(TREX)
             else:
-                notif_pr_table, ids = self._build_notification_pr_table()
+                notif_pr_table, pr_ids, notif_ids = self._build_notification_pr_table()
                 if len(notif_pr_table) > 1:
                     self._printer("NOTIFICATIONS")
                     self._printer(notif_pr_table[0])
-                    for row, id_ in zip(notif_pr_table[1:], ids):
+                    for row, pr_id, notif_id in zip(notif_pr_table[1:], pr_ids, notif_ids):
                         self._printer(
                             row,
                             href='"http://localhost:{}/clear_notification?notif={}&redirect={}"'.format(
                                 CONFIG["port"],
-                                id_,
-                                self.state["pull_requests"][id_]["browser_url"],
+                                notif_id,
+                                self.state["pull_requests"][pr_id]["browser_url"],
                             ),
                             refresh=True,
                         )
