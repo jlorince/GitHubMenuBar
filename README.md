@@ -15,6 +15,21 @@ This code is a work-in-progress, but is entirely read-only. You may have some is
 
 ## Getting started
 
+Easy version:
+
+1. Run the install script `bash install.sh`. This will clone this repo and install all dependencies
+
+2. Copy the file `GitHubMenuBar.5s.py` to the plugins directory you configured in step 1. The `.5s` naming convention tells BitBar to run this script every 5s. Feel free to modify the update frequency, keeping in mind this is only the interval at which the UI updates to match the server state, *not* how often the server does a data refresh with GitHub.
+
+3. Edit `.env` as desired, and copy to your BitBar plugins directory, or anywhere above it in the file hierarchy (e.g. your home directory). This defines some environment variables required for GMB to function. At a minimum you will need to set your GitHub username and access token in this file, though other options can be configured.
+
+4. Ensure that the shebang in `GitHubMenuBar.5s.py` matches your system Python.
+
+5. Launch the Bitbar app!
+
+
+Manual version:
+
 1. Install [BitBar](https://github.com/matryer/bitbar). The setup process is simple, and will have you configure a plugins folder that we will use below.
 
 2. Install Nerd fonts:
