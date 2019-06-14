@@ -8,9 +8,10 @@ This code is a work-in-progress, but is entirely read-only. You may have some is
 
  - Python 3.6+
  - MacOS 10.7+
- - [BitBar](https://github.com/matryer/bitbar)
- - [Nerd fonts](https://github.com/ryanoasis/nerd-fonts)
- - [teminal-notifier](https://github.com/julienXX/terminal-notifier) (Optional)
+ - [HomeBrew](https://brew.sh/)
+ - [BitBar](https://github.com/matryer/bitbar) (handled by install script)
+ - [Nerd fonts](https://github.com/ryanoasis/nerd-fonts) (handled by install script)
+ - [teminal-notifier](https://github.com/julienXX/terminal-notifier) (Optional, handled by install script)
 
 
 ## Getting started
