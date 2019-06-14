@@ -19,7 +19,10 @@ This code is a work-in-progress, but is entirely read-only. You may have some is
 
 2. Install Nerd fonts:
 
-    `brew cask install font-hack-nerd-font`
+    ```
+    brew tap homebrew/cask-fonts
+    brew cask install font-hack-nerd-font
+    ```
 
     GMB relies a number of specialized glyphs that come along with these fonts. Altneratives fonts may or may not work, and are untested.
 
@@ -34,7 +37,7 @@ This code is a work-in-progress, but is entirely read-only. You may have some is
 
 4. Copy the file `GitHubMenuBar.5s.py` to the plugins directory you configured in step 1. The `.5s` naming convention tells BitBar to run this script every 5s. Feel free to modify the update frequency, keeping in mind this is only the interval at which the UI updates to match the server state, *not* how often the server does a data refresh with GitHub.
 
-5. Edit `.env` as desired, and copy to yout BitBat plugins directory, or anywhere above it in the file hierarchy (e.g. your home directory). This defines some environment variables required for GMB to function. At a minimum you will need to set your GitHub username and access token in this file, though other options can be configured.
+5. Edit `.env` as desired, and copy to your BitBar plugins directory, or anywhere above it in the file hierarchy (e.g. your home directory). This defines some environment variables required for GMB to function. At a minimum you will need to set your GitHub username and access token in this file, though other options can be configured.
 
 6. (Optional): Install [teminal-notifier](https://github.com/julienXX/terminal-notifier)
 
@@ -42,7 +45,9 @@ This code is a work-in-progress, but is entirely read-only. You may have some is
 
     This is required for desktop notifications for new GitHub notifications and state changes (e.g. PR test success/failure). Not required if you don't want that feature.
 
-7. Launch the Bitbar app!
+7. Ensure that the shebang in `GitHubMenuBar.5s.py` matches your system Python (or whatever python you did the `pip install` for)
+
+8. Launch the Bitbar app!
 
 ## How does it work?
 
@@ -64,7 +69,7 @@ TODO - add basic architecture overview.
      - The number of PRs you have that are mergeable
 
     Each icon only appears if the count is > 0, and the GitHub icon is always present.
-    
+
     Clicking on the MenuBar item activates a dropdown with with following sections:
 
     ![Main](screenshots/main.png?raw=true)
@@ -91,10 +96,10 @@ TODO - add basic architecture overview.
 ## Known issues
 
  - The logic for determining test status is idiosyncratic to how my company handles pull request tests. You will likely need to modify the `_get_test_status` method of [github_client.py](https://github.com/jlorince/GitHubMenuBar/blob/master/github_menubar/github_client.py) to work for your testing workflow.
- 
- 
+
+
  ## Planned future work
- 
+
   - support for other issue mention notificiations
   - support for copying URLs from the dropdown
   - update data persistence to use SQLlite or similar

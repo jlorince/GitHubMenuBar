@@ -9,8 +9,8 @@ setup(
     author_email="jlorince@narrativescience.com",
     license="MIT",
     packages=["github_menubar"],
-    install_requites=[
-        "github3",
+    install_requires=[
+        "github3.py",
         "tabulate",
         "psutil",
         "pync",

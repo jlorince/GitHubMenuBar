@@ -1,4 +1,4 @@
-#!/usr/bin/env PYTHONIOENCODING=UTF-8 /Users/jlorince/anaconda3/bin/python
+#!/usr/bin/env PYTHONIOENCODING=UTF-8 /usr/bin/python
 from dotenv import load_dotenv
 # Need to load the env before importing `CONFIG`
 load_dotenv()
@@ -13,6 +13,7 @@ PID_FILE = CONFIG["pid_file"]
 
 
 def startProcess():
+    # TODO - use a regex here to handle `python3` case
     process = subprocess.Popen(
         [sys.executable.replace("python", "gmb-server")], env=os.environ.copy()
     )

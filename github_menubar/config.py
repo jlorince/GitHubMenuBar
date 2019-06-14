@@ -1,8 +1,7 @@
 import os
-from subprocess import getoutput
 
 CONFIG = {
-    "desktop_notifications": os.environ.get("GMB_DESKTOP_NOTIFICATIONS", True) if getoutput("which terminal-notifier") else False,
+    "desktop_notifications": os.environ.get("GMB_DESKTOP_NOTIFICATIONS", True) if os.path.exists("/usr/local/bin/terminal-notifier") else False,
     "port": int(os.environ.get("GMB_PORT", 9999)),
     "token": os.environ.get("GMB_TOKEN"),
     "update_interval": int(os.environ.get("GMB_UPDATE_INTERVAL", 120)),
