@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 
 import requests
 
@@ -17,6 +18,7 @@ TEST_STATUS_MAP = {
     "success": "success",
     "failure": "error",
     "cancelled": "cancelled",
+    "neutral": "in_progress",
 }
 GLYPHS = {
     "merged_pr": "\uf419",  # 
@@ -55,10 +57,12 @@ class Renderer:
 
     Implements generic renderer functionality.
     """
-    def __init__(self):
+
+    def __init__(self, pid):
         self.state = self._get_state()
         self.muted_prs = self._get_muted_prs()
         self.error = False
+        self.pid = pid
 
     def _get_state(self):
         response = requests.get(f"http://127.0.0.1:{CONFIG['port']}/state")
@@ -88,25 +92,29 @@ class Renderer:
             if pull_request["author"] != CONFIG["user"] and not pull_request["muted"]:
                 yield pull_request
 
+    @property
+    def _pr_urls(self):
+        return {pr["url"]: pr for pr in self.state["pull_requests"].values()}
+
 
 class BitBarRenderer(Renderer):
     def _build_notification_pr_table(self):
-        pr_urls = {pr["url"]: pr for pr in self.state["pull_requests"].values()}
         rows = []
         ids = []
 
         for notification in self.state["notifications"].values():
-            if notification["url"] in pr_urls:
-                pr = pr_urls[notification["url"]]
-                rows.append(
-                    [
-                        _trimmer(pr["description"]),
-                        pr["author"],
-                        pr["state"],
-                        notification.get("comment", ""),
-                    ]
-                )
-                ids.append(pr["id"])
+            if not notification["cleared"]:
+                if notification["url"] in self._pr_urls:
+                    pr = self._pr_urls[notification["url"]]
+                    rows.append(
+                        [
+                            _trimmer(pr["description"]),
+                            pr["author"],
+                            pr["state"],
+                            notification.get("comment", ""),
+                        ]
+                    )
+                    ids.append(pr["id"])
         return (
             tabulate(
                 rows, headers=["PR", "author", "state", ""], tablefmt="plain"
@@ -115,14 +123,14 @@ class BitBarRenderer(Renderer):
         )
 
     def _colorize_pr(self, pull_request):
-        if pull_request["state"] == "CLODED":
+        if pull_request["state"] == "CLOSED":
             color = "grey"
         elif (
             pull_request["test_status"] == "failure"
             or pull_request["mergeable"] is False
         ):
             color = "red"
-        elif pull_request["mergeable_state"] != "blocked":
+        elif pull_request["mergeable_state"] == "clean":
             color = "green"
         else:
             color = "orange"
@@ -209,7 +217,13 @@ class BitBarRenderer(Renderer):
         return result
 
     def _get_header_info(self):
-        n_notifications = len(self.state["notifications"])
+        n_notifications = len(
+            [
+                notif
+                for notif in self.state["notifications"].values()
+                if not notif["cleared"] and notif["url"] in self._pr_urls
+            ]
+        )
         n_failing_tests = 0
         n_open_prs = 0
         n_merge_conflicts = 0
@@ -323,7 +337,11 @@ class BitBarRenderer(Renderer):
                     for row, id_ in zip(notif_pr_table[1:], ids):
                         self._printer(
                             row,
-                            href=self.state["pull_requests"][id_]["browser_url"],
+                            href='"http://localhost:{}/clear_notification?notif={}&redirect={}"'.format(
+                                CONFIG["port"],
+                                id_,
+                                self.state["pull_requests"][id_]["browser_url"],
+                            ),
                             refresh=True,
                         )
                 user_pr_table, ids = self._build_pr_table(self._user_prs)
@@ -358,7 +376,7 @@ class BitBarRenderer(Renderer):
                     self._section_break()
                     self._printer("WATCHING")
                     self._printer(involved_pr_table[0])
-                    # self._printer("Click to mute a PR", alternate=True)
+                    self._printer("Click to mute a PR", alternate=True)
                     for row, id_, codeowners, reviews in zip(
                         involved_pr_table[1:], ids, codeowner_info, review_info
                     ):
@@ -377,25 +395,27 @@ class BitBarRenderer(Renderer):
                             self._printer("Reviews", indent=1)
                             for line, color in zip(*reviews):
                                 self._printer(line, indent=1, color=color)
-                        # self._printer(
-                        #     f"{row.rsplit(maxsplit=3)[0]}",
-                        #     alternate=True,
-                        #     bash="curl",
-                        #     param1='"localhost:{}/mute_pr?pr={}"'.format(
-                        #         CONFIG["port"], pull_request["id"]
-                        #     ),
-                        #     refresh=True,
-                        # )
+                        self._printer(
+                            f"{row.rsplit(maxsplit=3)[0]}",
+                            alternate=True,
+                            bash="/usr/bin/curl",
+                            param1='"localhost:{}/mute_pr?pr={}"'.format(
+                                CONFIG["port"], pull_request["id"]
+                            ),
+                            refresh=True,
+                        )
 
             self._section_break()
             self._printer("Utilities")
             if self.muted_prs:
                 self._printer("Muted pull requests", indent=1)
+                self._printer("Click to unmute", indent=2)
+                self._section_break(indent=2)
                 for pr in self.muted_prs:
                     self._printer(
                         pr["description"],
                         indent=2,
-                        bash="curl",
+                        bash="/usr/bin/curl",
                         param1='"localhost:{}/unmute_pr?pr={}"'.format(
                             CONFIG["port"], pr["id"]
                         ),
@@ -404,6 +424,14 @@ class BitBarRenderer(Renderer):
             self._printer(
                 "Force refresh",
                 indent=1,
-                bash="curl",
+                bash="/usr/bin/curl",
                 param1=f"localhost:{CONFIG['port']}/refresh",
             )
+            self._printer(f"Server PID: {self.pid}", indent=1)
+            if self.state["last_update"]:
+                update_time = datetime.strftime(
+                    datetime.utcfromtimestamp(self.state["last_update"]), "%H:%M:%S"
+                )
+            else:
+                update_time = "None"
+            self._printer(f"Last update (UTC): {update_time}", indent=1)

@@ -1,8 +1,10 @@
 import json
-from subprocess import call
+import logging
+import time
 
 import github3
 from github3.exceptions import NotFoundError
+import pync
 
 from github_menubar import CONFIG
 
@@ -13,11 +15,19 @@ class GitHubClient:
         self._client = github3.login(token=CONFIG["token"])
         try:
             self._load_state()
-        except FileNotFoundError:
+        except Exception:
             self.notifications = {}
             self.pull_requests = {}
             self.codeowners = {}
             self.team_members = {}
+            self.last_update = None
+
+    # def check_for_update(self):
+    #     if (
+    #         self.last_update is None
+    #         or (time.time() - self.last_update) >= CONFIG["update_interval"]
+    #     ):
+    #         self.loop.run_until_complete(asyncio.ensure_future(self.update()))
 
     def get_state(self):
         """Get the current state as a JSON-serializable dictionary"""
@@ -26,9 +36,10 @@ class GitHubClient:
             "pull_requests": self.pull_requests,
             "codeowners": self.codeowners,
             "team_members": self.team_members,
+            "last_update": self.last_update,
         }
 
-    def dump_state(self):
+    def _dump_state(self):
         """Dump current state to disk"""
         with open(CONFIG["state_path"], "w") as fh:
             fh.write(json.dumps(self.get_state()))
@@ -47,6 +58,7 @@ class GitHubClient:
             self.pull_requests = state["pull_requests"]
             self.codeowners = state["codeowners"]
             self.team_members = state["team_members"]
+            self.last_update = state["last_update"]
 
     def rate_limit(self):
         """Get rate limit information from the github3 client"""
@@ -64,25 +76,33 @@ class GitHubClient:
         """Unmute a PR"""
         self.pull_requests[id_]["muted"] = False
 
+    def clear_notification(self, notif_id):
+        self.notifications[notif_id]["cleared"] = True
+
     def get_pull_requests(self):
         """Search for all pull_requests involving the user"""
         if CONFIG["mentions_only"]:
-            authored = [pr for pr in self._client.search_issues(f"is:open is:pr author:{CONFIG['user']} archived:false")]
-            mentioned = [pr for pr in self._client.search_issues(f"is:open is:pr mentions:{CONFIG['user']} archived:false")]
+            authored = [
+                pr
+                for pr in self._client.search_issues(
+                    f"is:open is:pr author:{CONFIG['user']} archived:false"
+                )
+            ]
+            mentioned = [
+                pr
+                for pr in self._client.search_issues(
+                    f"is:open is:pr mentions:{CONFIG['user']} archived:false"
+                )
+            ]
             return authored + mentioned
-        return self._client.search_issues(f"is:open is:pr involves:{CONFIG['user']} archived:false")
+        return self._client.search_issues(
+            f"is:open is:pr involves:{CONFIG['user']} archived:false"
+        )
 
-    def _notify(self, message, title=None, subtitle=None, url=None):
+    def _notify(self, message, title=None, url=None):
         """Trigger a desktop notification (if they are enabled)"""
         if CONFIG["desktop_notifications"]:
-            args = [CONFIG["terminal_notifier_path"], "-message", message]
-            if title:
-                args.extend(["-title", title])
-            if subtitle:
-                args.extend(["-subtitle", subtitle])
-            if url:
-                args.extend(["-open", url])
-            call(args)
+            pync.notify(message, title=title, open=url)
 
     def _parse_notification(self, notification):
         notif = notification.subject.copy()
@@ -90,6 +110,7 @@ class GitHubClient:
         if "comments" in comment_url:
             comment_info = json.loads(self._client._get(comment_url).content.decode())
             notif["comment"] = comment_info["body_text"]
+        notif["cleared"] = False
         return notif
 
     def _update_pull_requests(self):
@@ -162,9 +183,13 @@ class GitHubClient:
     def update(self):
         self.codeowners = {}
         self.team_members = {}
+        logging.info(CONFIG["token"])
+        logging.info("starting update")
         self._update_pull_requests()
+        logging.info("done with update")
         self._update_notifications()
-        print(self._client.rate_limit())
+        self._dump_state()
+        self.last_update = time.time()
 
     def parse_codeowners_file(self, file_contents):
         codeowners = []
@@ -260,8 +285,7 @@ class GitHubClient:
         ):
             self._notify(
                 title="Test status change",
-                subtitle=current_pr["description"],
-                message=current_pr["test_status"],
+                message=f"{current_pr['description']}: {current_pr['test_status']}",
                 url=current_pr["browser_url"],
             )
 
