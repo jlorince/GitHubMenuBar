@@ -1,11 +1,15 @@
 #!/usr/bin/env PYTHONIOENCODING=UTF-8 /usr/bin/python
-from dotenv import load_dotenv
-# Need to load the env before importing `CONFIG`
-load_dotenv()
 import os
 import subprocess
 import sys
+
+from dotenv import load_dotenv  # noqa: I100
+
+# Need to load the env before importing `CONFIG`
+load_dotenv()  # noqa: I100
+
 from github_menubar import BitBarRenderer, CONFIG
+
 import psutil
 
 
@@ -13,10 +17,15 @@ PID_FILE = CONFIG["pid_file"]
 
 
 def startProcess():
-    process = subprocess.Popen(
-        [f"{sys.executable.rsplit('/', 1)[0]}/gmb-server"], env=os.environ.copy()
+    print(
+        f"{CONFIG['glyphs']['github_logo']} GMB Server loading...|{CONFIG['font_large']}"
     )
-    # Write PID file
+    process = subprocess.Popen(
+        [f"{sys.executable.rsplit('/', 1)[0]}/gmb-server"],
+        env=os.environ.copy(),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
     with open(PID_FILE, "w") as fi:
         fi.write(str(process.pid))
 
@@ -31,7 +40,5 @@ if __name__ == "__main__":
             renderer.print_state()
         else:
             startProcess()
-            sys.exit()
     else:
         startProcess()
-        sys.exit()

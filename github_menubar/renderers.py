@@ -20,24 +20,8 @@ TEST_STATUS_MAP = {
     "cancelled": "cancelled",
     "neutral": "in_progress",
 }
-GLYPHS = {
-    "merged_pr": "\uf419",  # 
-    "open_pr": "\uf407",  # 
-    "closed_pr": "\uf659",  # 
-    "tests": "\uf188",  # 
-    "null": "\ufce0",  # ﳠ
-    "github_logo": "\uf408",  # 
-    "bell": "\uf599",  # 
-    "x": "\uf00d",  # 
-    "in_progress": "\uf10c",  # 
-    "success": "\uf058",  # 
-    "error": "\uf06a",  # 
-    "na": "\uf6d7",  # 
-    "comment": "\uf679",  # 
-    "approval": "\uf67e",  # 
-    "cancelled": "\ufc38",  # ﰸ
-    "change_request": "\uf67c",  # 
-}
+
+GLYPHS = CONFIG["glyphs"]
 MAX_LENGTH = 100
 MAX_PR_LENGTH = 60
 
