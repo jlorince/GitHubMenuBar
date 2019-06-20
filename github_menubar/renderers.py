@@ -222,7 +222,7 @@ class BitBarRenderer(Renderer):
                     n_failing_tests += 1
                 if not pr["mergeable"]:
                     n_merge_conflicts += 1
-                if pr["mergeable_state"] != "clean":
+                if pr["mergeable_state"] == "clean":
                     n_ready += 1
         return {
             "n_notifications": n_notifications,

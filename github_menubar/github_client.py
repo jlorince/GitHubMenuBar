@@ -276,7 +276,7 @@ class GitHubClient:
 
     def parse_pull_request(self, pull_request):
         reviews = self.parse_reviews(pull_request)
-        previous = self.pull_requests.get(pull_request.url, {})
+        previous = self.pull_requests.get(pull_request.id, {})
         parsed = {
             "mergeable": pull_request.mergeable,
             "mergeable_state": pull_request.mergeable_state,
@@ -298,13 +298,16 @@ class GitHubClient:
         return parsed
 
     def _state_change_notification(self, current_pr, previous_pr):
-        if (
-            previous_pr["test_status"] != "pending"
-            and previous_pr["test_status"] != current_pr["test_status"]
-        ):
+        if previous_pr["test_status"] != current_pr["test_status"]:
             self._notify(
                 title="Test status change",
                 message=f"{current_pr['description']}: {current_pr['test_status']}",
+                url=current_pr["browser_url"],
+            )
+        if previous_pr["mergeable"] and not current_pr["mergeable"]:
+            self._notify(
+                title="Merge conflict",
+                message=f"{current_pr['description']}",
                 url=current_pr["browser_url"],
             )
 
