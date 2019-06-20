@@ -118,10 +118,10 @@ class BitBarRenderer(Renderer):
             or pull_request["mergeable"] is False
         ):
             color = COLORS["red"]
-        elif pull_request["mergeable_state"] in ("blocked", "unknown"):
-            color = COLORS["orange"]
         elif pull_request["mergeable_state"] == "clean":
             color = COLORS["green"]
+        else:
+            color = COLORS["orange"]
 
         return color
 

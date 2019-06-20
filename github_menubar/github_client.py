@@ -293,7 +293,7 @@ class GitHubClient:
         }
         parsed["owners"] = self.get_pr_codeowners(pull_request, reviews)
 
-        if previous:
+        if previous and parsed["author"] == CONFIG["user"]:
             self._state_change_notification(parsed, previous)
         return parsed
 
