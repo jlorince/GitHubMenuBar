@@ -9,6 +9,15 @@ import pync
 from github_menubar import CONFIG
 
 
+def load_config():
+    config_file_content = open(CONFIG["config_file_path"]).read()
+    json_content = config_file_content.split("##### DO NOT DELETE OR MODIFY THIS LINE #####")[1].strip()
+    return json.loads(json_content)
+
+
+CONFIG = load_config()
+
+
 class GitHubClient:
     def __init__(self):
         """Initialize the GitHub client and load state from disk"""
@@ -20,29 +29,46 @@ class GitHubClient:
             self.pull_requests = {}
             self.codeowners = {}
             self.team_members = {}
+            self.mentioned = set()
             self.last_update = None
+            self.mentions_only = False
 
-    # def check_for_update(self):
-    #     if (
-    #         self.last_update is None
-    #         or (time.time() - self.last_update) >= CONFIG["update_interval"]
-    #     ):
-    #         self.loop.run_until_complete(asyncio.ensure_future(self.update()))
+    def toggle_mentions_only(self):
+        self.mentions_only = not self.mentions_only
 
-    def get_state(self):
+    def get_state(self, mentions_only=None):
         """Get the current state as a JSON-serializable dictionary"""
+        _mentions_only = (
+            mentions_only if mentions_only is not None else self.mentions_only
+        )
+        if _mentions_only:
+            pull_requests = {
+                pr_id: pr
+                for pr_id, pr in self.pull_requests.items()
+                if pr_id in self.mentioned or pr["author"] == CONFIG["user"]
+            }
+            notifications = {
+                notif_id: notif
+                for notif_id, notif in self.notifications.items()
+                if notif["pr_id"] in self.mentioned or self.pull_requests[notif["pr_id"]]["author"] == CONFIG["user"]
+            }
+        else:
+            pull_requests = self.pull_requests
+            notifications = self.notifications
         return {
-            "notifications": self.notifications,
-            "pull_requests": self.pull_requests,
+            "notifications": notifications,
+            "pull_requests": pull_requests,
             "codeowners": self.codeowners,
             "team_members": self.team_members,
             "last_update": self.last_update,
+            "mentioned": list(self.mentioned),
+            "mentions_only": self.mentions_only,
         }
 
     def _dump_state(self):
         """Dump current state to disk"""
         with open(CONFIG["state_path"], "w") as fh:
-            fh.write(json.dumps(self.get_state()))
+            fh.write(json.dumps(self.get_state(mentions_only=False)))
 
     def _transform_pr_url(self, api_url):
         """Transform a pull request API URL to a browser URL"""
@@ -59,6 +85,8 @@ class GitHubClient:
             self.codeowners = state["codeowners"]
             self.team_members = state["team_members"]
             self.last_update = state["last_update"]
+            self.mentioned = set(state["mentioned"])
+            self.mentions_only = state["mentions_only"]
 
     def rate_limit(self):
         """Get rate limit information from the github3 client"""
@@ -81,23 +109,20 @@ class GitHubClient:
 
     def get_pull_requests(self):
         """Search for all pull_requests involving the user"""
-        if CONFIG["mentions_only"]:
-            authored = [
-                pr
-                for pr in self._client.search_issues(
-                    f"is:open is:pr author:{CONFIG['user']} archived:false"
-                )
-            ]
-            mentioned = [
-                pr
-                for pr in self._client.search_issues(
-                    f"is:open is:pr mentions:{CONFIG['user']} archived:false"
-                )
-            ]
-            return authored + mentioned
-        return self._client.search_issues(
+        prs = []
+        issue_pr_map = {}
+        for issue in self._client.search_issues(
             f"is:open is:pr involves:{CONFIG['user']} archived:false"
-        )
+        ):
+            pr = issue.issue.pull_request()
+            issue_pr_map[issue.id] = pr.id
+            prs.append(pr)
+
+        for issue in self._client.search_issues(
+            f"is:open is:pr mentions:{CONFIG['user']} archived:false"
+        ):
+            self.mentioned.add(issue_pr_map[issue.id])
+        return prs
 
     def _notify(self, message, title=None, url=None):
         """Trigger a desktop notification (if they are enabled)"""
@@ -105,38 +130,38 @@ class GitHubClient:
             pync.notify(message, title=title, open=url)
 
     def _parse_notification(self, notification):
+        prs_by_url = {pr["url"]: pr for pr in self.pull_requests.values()}
         notif = notification.subject.copy()
         comment_url = notif.get("latest_comment_url", "")
-        if "comments" in comment_url:
+        if comment_url and "comments" in comment_url:
             comment_info = json.loads(self._client._get(comment_url).content.decode())
             notif["comment"] = comment_info["body_text"]
         notif["cleared"] = False
+        corresponding_pr = prs_by_url.get(notification.subject["url"])
+        notif["pr_id"] = corresponding_pr["id"] if corresponding_pr else None
+        notif["pr_url"] = corresponding_pr["browser_url"]
         return notif
 
     def _update_pull_requests(self):
         pull_requests = []
         for pull_request in self.get_pull_requests():
-            if not isinstance(pull_request, github3.pulls.PullRequest):
-                pull_request = pull_request.issue.pull_request()
-                repo = pull_request.repository
-                repo_key = f"{repo.owner.login}|{repo.name}"
-                if repo_key not in self.codeowners:
-                    try:
-                        codeowner_file = pull_request.repository.file_contents(
-                            "CODEOWNERS"
-                        )
-                        codeowner_file_contents = codeowner_file.decoded.decode()
-                        self.codeowners[repo_key] = self.parse_codeowners_file(
-                            codeowner_file_contents
-                        )
-                    except NotFoundError:
-                        self.codeowners[repo_key] = None
-                if repo.owner.login not in self.team_members:
-                    try:
-                        org = self._client.organization(repo.owner.login)
-                        self.team_members[repo.owner.login] = self.parse_teamembers(org)
-                    except NotFoundError:
-                        self.team_members[repo.owner.login] = None
+            repo = pull_request.repository
+            repo_key = f"{repo.owner.login}|{repo.name}"
+            if repo_key not in self.codeowners:
+                try:
+                    codeowner_file = pull_request.repository.file_contents("CODEOWNERS")
+                    codeowner_file_contents = codeowner_file.decoded.decode()
+                    self.codeowners[repo_key] = self.parse_codeowners_file(
+                        codeowner_file_contents
+                    )
+                except NotFoundError:
+                    self.codeowners[repo_key] = None
+            if repo.owner.login not in self.team_members:
+                try:
+                    org = self._client.organization(repo.owner.login)
+                    self.team_members[repo.owner.login] = self.parse_teamembers(org)
+                except NotFoundError:
+                    self.team_members[repo.owner.login] = None
 
             pull_requests.append(pull_request)
 
@@ -152,26 +177,16 @@ class GitHubClient:
 
     def _update_notifications(self):
         current_notifications = set()
-        prs_by_url = {pr["url"]: pr for pr in self.pull_requests.values()}
         for notification in self._client.notifications():
-            corresponding_pr = prs_by_url.get(notification.subject["url"])
-            if (
-                not CONFIG["mentions_only"] or notification.reason == "mention"
-            ) and not (corresponding_pr and corresponding_pr["muted"]):
-                current_notifications.add(notification.id)
-                if notification.id not in self.notifications:
-                    self.notifications[notification.id] = self._parse_notification(
-                        notification
-                    )
-                    url = (
-                        self._transform_pr_url(corresponding_pr["url"])
-                        if corresponding_pr
-                        else None
-                    )
+            current_notifications.add(notification.id)
+            if notification.id not in self.notifications:
+                parsed = self._parse_notification(notification)
+                self.notifications[notification.id] = parsed
+                if not self.mentions_only or notification["pr_id"] in self.mentioned:
                     self._notify(
                         title="New Notification",
                         message=notification.subject["title"],
-                        url=url,
+                        url=parsed["pr_url"],
                     )
         # clear any old notifications
         self.notifications = {
@@ -264,7 +279,7 @@ class GitHubClient:
             "description": self._format_pr_description(pull_request),
             "state": "MERGED" if pull_request.merged else pull_request.state.upper(),
             "url": pull_request.url,
-            "browser_url": self._transform_pr_url(pull_request.url),
+            "browser_url": pull_request.html_url,
             "author": pull_request.user.login,
             "test_status": self._get_test_status(pull_request),
             "updated_at": str(pull_request.updated_at),

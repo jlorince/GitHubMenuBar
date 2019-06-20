@@ -5,12 +5,13 @@ import requests
 
 from tabulate import tabulate
 
-from .config import CONFIG, TREX
+from github_menubar.config import COLORS, GLYPHS
+from github_menubar.github_client import load_config
 
 REVIEW_STATE_MAP = {
     "COMMENTED": "comment",
-    "APPROVED": "approval",
-    "CHANGES_REQUESTED": "change_request",
+    "APPROVED": "success",
+    "CHANGES_REQUESTED": "error",
     "DISMISSED": "x",
 }
 TEST_STATUS_MAP = {
@@ -21,9 +22,11 @@ TEST_STATUS_MAP = {
     "neutral": "in_progress",
 }
 
-GLYPHS = CONFIG["glyphs"]
 MAX_LENGTH = 100
 MAX_PR_LENGTH = 60
+
+CONFIG = load_config()
+PID = int(open(CONFIG["pid_file"]).read().strip())
 
 
 def _trimmer(text):
@@ -42,11 +45,10 @@ class Renderer:
     Implements generic renderer functionality.
     """
 
-    def __init__(self, pid):
+    def __init__(self):
         self.state = self._get_state()
         self.muted_prs = self._get_muted_prs()
         self.error = False
-        self.pid = pid
 
     def _get_state(self):
         response = requests.get(f"http://127.0.0.1:{CONFIG['port']}/state")
@@ -87,19 +89,18 @@ class BitBarRenderer(Renderer):
         ids = []
         notif_ids = []
         for notif_id, notification in self.state["notifications"].items():
-            if not notification["cleared"]:
-                if notification["url"] in self._pr_urls:
-                    pr = self._pr_urls[notification["url"]]
-                    rows.append(
-                        [
-                            _trimmer(pr["description"]),
-                            pr["author"],
-                            pr["state"],
-                            notification.get("comment", ""),
-                        ]
-                    )
-                    ids.append(pr["id"])
-                    notif_ids.append(notif_id)
+            if not notification["cleared"] and notification["url"] in self._pr_urls:
+                pr = self._pr_urls[notification["url"]]
+                rows.append(
+                    [
+                        _trimmer(pr["description"]),
+                        pr["author"],
+                        pr["state"],
+                        notification.get("comment", ""),
+                    ]
+                )
+                ids.append(pr["id"])
+                notif_ids.append(notif_id)
         return (
             tabulate(
                 rows, headers=["PR", "author", "state", ""], tablefmt="plain"
@@ -110,16 +111,16 @@ class BitBarRenderer(Renderer):
 
     def _colorize_pr(self, pull_request):
         if pull_request["state"] == "CLOSED":
-            color = "grey"
+            color = "gray"
         elif (
             pull_request["test_status"] == "failure"
             or pull_request["mergeable"] is False
         ):
-            color = "red"
-        elif pull_request["mergeable_state"] == "clean":
-            color = "green"
+            color = COLORS["red"]
+        elif pull_request["mergeable_state"] != "blocked":
+            color = COLORS["green"]
         else:
-            color = "orange"
+            color = COLORS["orange"]
         return color
 
     def _build_pr_table(self, prs):
@@ -180,11 +181,11 @@ class BitBarRenderer(Renderer):
                 formatted_owners = ", ".join(
                     owner.split("/", 1)[-1] for owner in owners.split("|")
                 )
-                colors.append("green" if approved else "yellow")
+                colors.append(COLORS["green"] if approved else COLORS["orange"])
                 rows.append(
                     [
                         formatted_owners,
-                        GLYPHS["approval"] if approved else GLYPHS["in_progress"],
+                        GLYPHS["success"] if approved else GLYPHS["in_progress"],
                     ]
                 )
             result.append((tabulate(rows, tablefmt="plain").split("\n"), colors))
@@ -194,12 +195,10 @@ class BitBarRenderer(Renderer):
         result = []
         for pr in prs:
             rows = []
-            colors = []
             for user, review in pr["reviews"].items():
                 glyph = GLYPHS[REVIEW_STATE_MAP[review["state"]]]
-                colors.append("green" if review["state"] == "APPROVED" else "yellow")
                 rows.append([user, glyph])
-            result.append((tabulate(rows, tablefmt="plain").split("\n"), colors))
+            result.append(tabulate(rows, tablefmt="plain").split("\n"))
         return result
 
     def _get_header_info(self):
@@ -235,6 +234,8 @@ class BitBarRenderer(Renderer):
         self, n_notifications, n_open_prs, n_failing_tests, n_merge_conflicts, n_ready
     ):
         result = f"{GLYPHS['github_logo']} "
+        if CONFIG["collapsed"]:
+            return result
         if n_notifications:
             result += f"{GLYPHS['bell']}{n_notifications} "
         if n_open_prs:
@@ -349,12 +350,12 @@ class BitBarRenderer(Renderer):
                         if codeowners:
                             self._printer("Code owner groups", indent=1)
                             for line, color in zip(*codeowners):
-                                self._printer(line, indent=1, color=color)
+                                self._printer(line, indent=1)
                         if reviews:
                             self._section_break(indent=1)
                             self._printer("Reviews", indent=1)
-                            for line, color in zip(*reviews):
-                                self._printer(line, indent=1, color=color)
+                            for line in reviews:
+                                self._printer(line, indent=1)
                 involved_pr_table, ids = self._build_pr_table(self._involved_prs)
                 codeowner_info = self._build_codeowners_tables(self._involved_prs)
                 review_info = self._build_review_tables(self._involved_prs)
@@ -375,12 +376,12 @@ class BitBarRenderer(Renderer):
                         if codeowners:
                             self._printer("Code owner groups", indent=1)
                             for line, color in zip(*codeowners):
-                                self._printer(line, indent=1, color=color)
+                                self._printer(line, indent=1)
                         if reviews:
                             self._section_break(indent=1)
                             self._printer("Reviews", indent=1)
-                            for line, color in zip(*reviews):
-                                self._printer(line, indent=1, color=color)
+                            for line in reviews:
+                                self._printer(line, indent=1)
                         self._printer(
                             f"{row.rsplit(maxsplit=3)[0]}",
                             alternate=True,
@@ -408,12 +409,33 @@ class BitBarRenderer(Renderer):
                         refresh=True,
                     )
             self._printer(
+                f"{'Enable' if not self.state['mentions_only'] else 'Disable'} mentions only mode",
+                indent=1,
+                bash="/usr/bin/curl",
+                param1=f"localhost:{CONFIG['port']}/toggle_mentions",
+                refresh=True,
+            )
+            self._printer(
                 "Force refresh",
                 indent=1,
                 bash="/usr/bin/curl",
                 param1=f"localhost:{CONFIG['port']}/refresh",
             )
-            self._printer(f"Server PID: {self.pid}", indent=1)
+            self._printer(
+                "Kill server",
+                indent=1,
+                bash="kill",
+                param1=str(PID),
+                open_terminal=True
+            )
+            self._printer(
+                "Open config file",
+                indent=1,
+                bash="$EDITOR",
+                param1=CONFIG["config_file_path"],
+                open_terminal=True
+            )
+            self._printer(f"Server PID: {PID}", indent=1)
             if self.state["last_update"]:
                 update_time = datetime.strftime(
                     datetime.utcfromtimestamp(self.state["last_update"]), "%H:%M:%S"

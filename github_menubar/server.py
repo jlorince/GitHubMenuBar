@@ -5,13 +5,13 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from flask import Flask, jsonify, redirect, request
 
-from github_menubar import CONFIG, GitHubClient, TREX
+from github_menubar import CONFIG, GitHubClient
 
 
 def main():
 
     logging.basicConfig(
-        filename="/tmp/gitmnubar.log",
+        filename=CONFIG["log_file"],
         filemode="a",
         format="%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s",
         datefmt="%H:%M:%S",
@@ -44,11 +44,6 @@ def main():
         """Get a listing of all muted prs"""
         return jsonify(app.client.get_muted_prs())
 
-    @app.route("/trex")
-    def trex():
-        """Roar!"""
-        return TREX
-
     @app.route("/mute_pr")
     def mute_pr():
         """Mute a pr"""
@@ -66,6 +61,12 @@ def main():
         """unmute a pr"""
         app.client.clear_notification(request.args.get("notif"))
         return redirect(request.args.get("redirect"))
+
+    @app.route("/toggle_mentions")
+    def toggle_mentions():
+        """unmute a pr"""
+        app.client.toggle_mentions_only()
+        return "ok"
 
     @app.route("/refresh")
     def refresh():

@@ -16,54 +16,23 @@ This code is a work-in-progress, but is entirely read-only. You may have some is
 
 ## Getting started
 
-Easy version:
+1. Make sure you have a GitHub [personal access token](see https://github.com/settings/tokens) For full functionality, the token should have full repo, user, and notification permissions.
 
-1. Run the install script `bash install.sh`. This will clone this repo and install all dependencies
+2. Clone this repo, and run the install script `bash install.sh` from the repo root.
 
-2. Copy the file `GitHubMenuBar.5s.py` to the plugins directory you configured in step 1. The `.5s` naming convention tells BitBar to run this script every 5s. Feel free to modify the update frequency, keeping in mind this is only the interval at which the UI updates to match the server state, *not* how often the server does a data refresh with GitHub.
+3. Copy the file `GitHubMenuBar.5s.py` to the plugins directory you configured in step 1. The `.5s` naming convention tells BitBar to run this script every 5s. Feel free to modify the update frequency, keeping in mind this is only the interval at which the UI updates to match the server state, *not* how often the server does a data refresh with GitHub.
 
-3. Edit `.env` as desired, and copy to your BitBar plugins directory, or anywhere above it in the file hierarchy (e.g. your home directory). This defines some environment variables required for GMB to function. At a minimum you will need to set your GitHub username and access token in this file, though other options can be configured.
+3. Ensure that the shebang in `GitHubMenuBar.5s.py` matches your system Python.
 
-4. Ensure that the shebang in `GitHubMenuBar.5s.py` matches your system Python.
+    IMPORTANT! If you're using Pyenv, you're shebang will also need to include the value of PYENV_VERSION environment variable. An example shebang would thus look like:
+    `#!/usr/bin/env PYTHONIOENCODING=UTF-8 PYENV_VERSION=py-3.6.3 /path/to/pyenv/python`
 
-5. Launch the Bitbar app!
+4. Launch the Bitbar app! The first time the plugin runs, click the GitHub logo, then select "Click to setup GitHubMenuBar" and follow the instructions to setup your config file.
 
+## Updating
 
-Manual version:
+Proper version managment is a TODO, so for now just pull the repo, and re-run the install script. Your settings are saved in your home directory and will be preserved.
 
-1. Install [BitBar](https://github.com/matryer/bitbar). The setup process is simple, and will have you configure a plugins folder that we will use below.
-
-2. Install Nerd fonts:
-
-    ```
-    brew tap homebrew/cask-fonts
-    brew cask install font-hack-nerd-font
-    ```
-
-    GMB relies a number of specialized glyphs that come along with these fonts. Altneratives fonts may or may not work, and are untested.
-
-3. Clone this repository and install the package
-
-
-    ```
-    git clone https://github.com/jlorince/GitHubMenuBar.git
-    cd GitHubMenuBar
-    pip install .
-   ```
-
-4. Copy the file `GitHubMenuBar.5s.py` to the plugins directory you configured in step 1. The `.5s` naming convention tells BitBar to run this script every 5s. Feel free to modify the update frequency, keeping in mind this is only the interval at which the UI updates to match the server state, *not* how often the server does a data refresh with GitHub.
-
-5. Edit `.env` as desired, and copy to your BitBar plugins directory, or anywhere above it in the file hierarchy (e.g. your home directory). This defines some environment variables required for GMB to function. At a minimum you will need to set your GitHub username and access token in this file, though other options can be configured.
-
-6. (Optional): Install [teminal-notifier](https://github.com/julienXX/terminal-notifier)
-
-    `brew install terminal-notifier`
-
-    This is required for desktop notifications for new GitHub notifications and state changes (e.g. PR test success/failure). Not required if you don't want that feature.
-
-7. Ensure that the shebang in `GitHubMenuBar.5s.py` matches your system Python (or whatever python you did the `pip install` for)
-
-8. Launch the Bitbar app!
 
 ## How does it work?
 
@@ -107,6 +76,8 @@ TODO - add basic architecture overview.
     - Access and unmute and muted PRs
     - View the PID of the GMB server process and the time of the last data refresh
     - an option to force the server to refresh data from GitHub
+    - access your configuration file
+    - kill the gmb server (triggering an auto-restart)
 
 
 ## Known issues
