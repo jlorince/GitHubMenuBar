@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 
-from github_menubar.config import COLORS, GLYPHS, TREX
+from github_menubar.config import COLORS, CONFIG as DEFAULT_CONFIG, GLYPHS, TREX
 from github_menubar.github_client import load_config
 
 import requests
@@ -27,7 +27,7 @@ MAX_LENGTH = 100
 MAX_PR_LENGTH = 60
 
 CONFIG = load_config()
-PID = int(open(CONFIG["pid_file"]).read().strip())
+PID = int(open(DEFAULT_CONFIG["pid_file"]).read().strip())
 
 
 def _trimmer(text):
@@ -118,10 +118,11 @@ class BitBarRenderer(Renderer):
             or pull_request["mergeable"] is False
         ):
             color = COLORS["red"]
-        elif pull_request["mergeable_state"] != "blocked":
-            color = COLORS["green"]
-        else:
+        elif pull_request["mergeable_state"] in ("blocked", "unknown"):
             color = COLORS["orange"]
+        elif pull_request["mergeable_state"] == "clean":
+            color = COLORS["green"]
+
         return color
 
     def _build_pr_table(self, prs):
@@ -221,7 +222,7 @@ class BitBarRenderer(Renderer):
                     n_failing_tests += 1
                 if not pr["mergeable"]:
                     n_merge_conflicts += 1
-                if pr["mergeable_state"] != "blocked":
+                if pr["mergeable_state"] != "clean":
                     n_ready += 1
         return {
             "n_notifications": n_notifications,

@@ -4,14 +4,17 @@ import time
 
 import github3
 from github3.exceptions import NotFoundError
-import pync
 
-from github_menubar import CONFIG
+from github_menubar.config import CONFIG as DEFAULT_CONFIG
+
+import pync
 
 
 def load_config():
-    config_file_content = open(CONFIG["config_file_path"]).read()
-    json_content = config_file_content.split("##### DO NOT DELETE OR MODIFY THIS LINE #####")[1].strip()
+    config_file_content = open(DEFAULT_CONFIG["config_file_path"]).read()
+    json_content = config_file_content.split(
+        "##### DO NOT DELETE OR MODIFY THIS LINE #####"
+    )[1].strip()
     return json.loads(json_content)
 
 
@@ -50,7 +53,8 @@ class GitHubClient:
             notifications = {
                 notif_id: notif
                 for notif_id, notif in self.notifications.items()
-                if notif["pr_id"] in self.mentioned or self.pull_requests[notif["pr_id"]]["author"] == CONFIG["user"]
+                if notif["pr_id"] in self.mentioned
+                or self.pull_requests[notif["pr_id"]]["author"] == CONFIG["user"]
             }
         else:
             pull_requests = self.pull_requests
