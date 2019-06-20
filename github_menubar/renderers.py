@@ -1,12 +1,13 @@
 import json
 from datetime import datetime
 
+from github_menubar.config import COLORS, GLYPHS, TREX
+from github_menubar.github_client import load_config
+
 import requests
 
 from tabulate import tabulate
 
-from github_menubar.config import COLORS, GLYPHS
-from github_menubar.github_client import load_config
 
 REVIEW_STATE_MAP = {
     "COMMENTED": "comment",
