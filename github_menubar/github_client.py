@@ -11,11 +11,14 @@ import pync
 
 
 def load_config():
-    config_file_content = open(DEFAULT_CONFIG["config_file_path"]).read()
-    json_content = config_file_content.split(
-        "##### DO NOT DELETE OR MODIFY THIS LINE #####"
-    )[1].strip()
-    return json.loads(json_content)
+    try:
+        config_file_content = open(DEFAULT_CONFIG["config_file_path"]).read()
+        json_content = config_file_content.split(
+            "##### DO NOT DELETE OR MODIFY THIS LINE #####"
+        )[1].strip()
+        return json.loads(json_content)
+    except Exception:
+        return CONFIG
 
 
 CONFIG = load_config()
