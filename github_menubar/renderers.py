@@ -411,7 +411,7 @@ class BitBarRenderer(Renderer):
                         refresh=True,
                     )
             self._printer(
-                f"{'Enable' if not self.state['mentions_only'] else 'Disable'} mentions only mode",
+                f"{'Disable' if CONFIG['mentions_only'] else 'Enable'} mentions only mode",
                 indent=1,
                 bash="/usr/bin/curl",
                 param1=f"localhost:{CONFIG['port']}/toggle_mentions",

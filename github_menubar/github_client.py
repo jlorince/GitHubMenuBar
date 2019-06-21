@@ -146,7 +146,7 @@ class GitHubClient:
         notif["cleared"] = False
         corresponding_pr = prs_by_url.get(notification.subject["url"])
         notif["pr_id"] = corresponding_pr["id"] if corresponding_pr else None
-        notif["pr_url"] = corresponding_pr["browser_url"]
+        notif["pr_url"] = corresponding_pr["browser_url"] if corresponding_pr else None
         return notif
 
     def _update_pull_requests(self):
@@ -241,7 +241,7 @@ class GitHubClient:
                     if path in f"/{file.filename}":
                         if owners not in all_owners:
                             approved = False
-                            if resviews:
+                            if reviews:
                                 for owner in owners:
                                     if "/" in owner:
                                         if any(
