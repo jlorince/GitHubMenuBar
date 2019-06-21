@@ -128,10 +128,10 @@ class GitHubClient:
             self.mentioned.add(issue_pr_map[issue.id])
         return prs
 
-    def _notify(self, message, title=None, url=None):
+    def _notify(self, **kwargs):
         """Trigger a desktop notification (if they are enabled)"""
         if CONFIG["desktop_notifications"]:
-            pync.notify(message, title=title, open=url)
+            pync.notify(**kwargs)
 
     def _parse_notification(self, notification):
         prs_by_url = {pr["url"]: pr for pr in self.pull_requests.values()}
@@ -190,7 +190,7 @@ class GitHubClient:
                     self._notify(
                         title="New Notification",
                         message=notification.subject["title"],
-                        url=parsed["pr_url"],
+                        open=parsed["pr_url"],
                     )
         # clear any old notifications
         self.notifications = {
@@ -298,17 +298,20 @@ class GitHubClient:
         return parsed
 
     def _state_change_notification(self, current_pr, previous_pr):
-        if previous_pr["test_status"] != current_pr["test_status"]:
+        if (current_pr["test_status"] != "pending") and (
+            previous_pr["test_status"] != current_pr["test_status"]
+        ):
             self._notify(
                 title="Test status change",
-                message=f"{current_pr['description']}: {current_pr['test_status']}",
-                url=current_pr["browser_url"],
+                subtitle=f"{current_pr['description']}",
+                message=f"{current_pr['test_status']}",
+                open=current_pr["browser_url"],
             )
         if previous_pr["mergeable"] and not current_pr["mergeable"]:
             self._notify(
                 title="Merge conflict",
                 message=f"{current_pr['description']}",
-                url=current_pr["browser_url"],
+                open=current_pr["browser_url"],
             )
 
     def _get_test_status(self, pull_request):
