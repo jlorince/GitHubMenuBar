@@ -3,7 +3,7 @@ import logging
 import time
 
 import github3
-from github3.exceptions import NotFoundError
+from github3.exceptions import ForbiddenError, NotFoundError
 
 from github_menubar.config import CONFIG as DEFAULT_CONFIG
 
@@ -161,13 +161,13 @@ class GitHubClient:
                     self.codeowners[repo_key] = self.parse_codeowners_file(
                         codeowner_file_contents
                     )
-                except NotFoundError:
+                except NotFoundError, ForbiddenError:
                     self.codeowners[repo_key] = None
             if repo.owner.login not in self.team_members:
                 try:
                     org = self._client.organization(repo.owner.login)
                     self.team_members[repo.owner.login] = self.parse_teamembers(org)
-                except NotFoundError:
+                except NotFoundError, ForbiddenError:
                     self.team_members[repo.owner.login] = None
 
             pull_requests.append(pull_request)

@@ -27,7 +27,10 @@ MAX_LENGTH = 100
 MAX_PR_LENGTH = 60
 
 CONFIG = load_config()
-PID = int(open(DEFAULT_CONFIG["pid_file"]).read().strip())
+try:
+    PID = int(open(DEFAULT_CONFIG["pid_file"]).read().strip())
+except FileNotFoundError:
+    PID = None
 
 
 def _trimmer(text):
