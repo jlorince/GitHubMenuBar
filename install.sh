@@ -9,5 +9,5 @@ rm ~/.github_menubar.state.json
 brew cask install bitbar
 brew tap homebrew/cask-fonts
 brew cask install font-hack-nerd-font
-pip install .
+pip install --upgrade .
 brew install terminal-notifier
