@@ -18,7 +18,7 @@ def load_config():
         )[1].strip()
         return json.loads(json_content)
     except Exception:
-        return CONFIG
+        return DEFAULT_CONFIG
 
 
 CONFIG = load_config()
