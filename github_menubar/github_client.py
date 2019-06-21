@@ -235,33 +235,33 @@ class GitHubClient:
     def get_pr_codeowners(self, pr, reviews):
         all_owners = {}
         for file in pr.files():
-            for path, owners in self.codeowners.get(
-                f"{pr.repository.owner.login}|{pr.repository.name}", []
-            ):
-                if path in f"/{file.filename}":
-                    if owners not in all_owners:
-                        approved = False
-                        if reviews:
-                            for owner in owners:
-                                if "/" in owner:
-                                    if any(
-                                        user
-                                        in self.team_members.get(
-                                            pr.repository.owner.login, {}
-                                        ).get(owner, ())
-                                        and review["state"] == "APPROVED"
-                                        for user, review in reviews.items()
-                                    ):
-                                        approved = True
-                                        break
-                                else:
-                                    if any(
-                                        user == owner and review["state"] == "APPROVED"
-                                        for user, review in reviews.items()
-                                    ):
-                                        approved = True
-                                        break
-                        all_owners["|".join(owners)] = approved
+            codeowner_info = self.codeowners.get(f"{pr.repository.owner.login}|{pr.repository.name}")
+            if codeowner_info:
+                for path, owners in codeowner_info:
+                    if path in f"/{file.filename}":
+                        if owners not in all_owners:
+                            approved = False
+                            if resviews:
+                                for owner in owners:
+                                    if "/" in owner:
+                                        if any(
+                                            user
+                                            in self.team_members.get(
+                                                pr.repository.owner.login, {}
+                                            ).get(owner, ())
+                                            and review["state"] == "APPROVED"
+                                            for user, review in reviews.items()
+                                        ):
+                                            approved = True
+                                            break
+                                    else:
+                                        if any(
+                                            user == owner and review["state"] == "APPROVED"
+                                            for user, review in reviews.items()
+                                        ):
+                                            approved = True
+                                            break
+                            all_owners["|".join(owners)] = approved
         return all_owners
 
     def parse_reviews(self, pull_request):
