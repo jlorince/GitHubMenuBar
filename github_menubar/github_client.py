@@ -56,8 +56,8 @@ class GitHubClient:
             notifications = {
                 notif_id: notif
                 for notif_id, notif in self.notifications.items()
-                if notif["pr_id"] in self.mentioned
-                or self.pull_requests[notif.get("pr_id", {})].get("author") == CONFIG["user"]
+                if notif.get("pr_id") in self.mentioned
+                or self.pull_requests.get(notif.get("pr_id"), {}).get("author") == CONFIG["user"]
             }
         else:
             pull_requests = self.pull_requests
