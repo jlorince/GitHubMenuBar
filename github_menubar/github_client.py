@@ -37,7 +37,7 @@ class GitHubClient:
             self.team_members = {}
             self.mentioned = set()
             self.last_update = None
-            self.mentions_only = False
+            self.mentions_only = CONFIG.get("mentions_only") or False
 
     def toggle_mentions_only(self):
         self.mentions_only = not self.mentions_only
