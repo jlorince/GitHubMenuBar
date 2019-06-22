@@ -21,13 +21,11 @@ def load_config():
         return DEFAULT_CONFIG
 
 
-CONFIG = load_config()
-
-
 class GitHubClient:
     def __init__(self):
         """Initialize the GitHub client and load state from disk"""
-        self._client = github3.login(token=CONFIG["token"])
+        self.CONFIG = load_config()
+        self._client = github3.login(token=self.CONFIG["token"])
         try:
             self._load_state()
         except Exception:
@@ -37,7 +35,7 @@ class GitHubClient:
             self.team_members = {}
             self.mentioned = set()
             self.last_update = None
-            self.mentions_only = CONFIG.get("mentions_only") or False
+            self.mentions_only = self.CONFIG.get("mentions_only") or False
 
     def toggle_mentions_only(self):
         self.mentions_only = not self.mentions_only
@@ -51,13 +49,13 @@ class GitHubClient:
             pull_requests = {
                 pr_id: pr
                 for pr_id, pr in self.pull_requests.items()
-                if pr_id in self.mentioned or pr["author"] == CONFIG["user"]
+                if pr_id in self.mentioned or pr["author"] == self.CONFIG["user"]
             }
             notifications = {
                 notif_id: notif
                 for notif_id, notif in self.notifications.items()
                 if notif.get("pr_id") in self.mentioned
-                or self.pull_requests.get(notif.get("pr_id"), {}).get("author") == CONFIG["user"]
+                or self.pull_requests.get(notif.get("pr_id"), {}).get("author") == self.CONFIG["user"]
             }
         else:
             pull_requests = self.pull_requests
@@ -74,7 +72,7 @@ class GitHubClient:
 
     def _dump_state(self):
         """Dump current state to disk"""
-        with open(CONFIG["state_path"], "w") as fh:
+        with open(self.CONFIG["state_path"], "w") as fh:
             fh.write(json.dumps(self.get_state(mentions_only=False)))
 
     def _transform_pr_url(self, api_url):
@@ -85,7 +83,7 @@ class GitHubClient:
 
     def _load_state(self):
         """load state from disk"""
-        with open(CONFIG["state_path"], "r") as fh:
+        with open(self.CONFIG["state_path"], "r") as fh:
             state = json.loads(fh.read())
             self.notifications = state["notifications"]
             self.pull_requests = state["pull_requests"]
@@ -119,21 +117,21 @@ class GitHubClient:
         prs = []
         issue_pr_map = {}
         for issue in self._client.search_issues(
-            f"is:open is:pr involves:{CONFIG['user']} archived:false"
+            f"is:open is:pr involves:{self.CONFIG['user']} archived:false"
         ):
             pr = issue.issue.pull_request()
             issue_pr_map[issue.id] = pr.id
             prs.append(pr)
 
         for issue in self._client.search_issues(
-            f"is:open is:pr mentions:{CONFIG['user']} archived:false"
+            f"is:open is:pr mentions:{self.CONFIG['user']} archived:false"
         ):
             self.mentioned.add(issue_pr_map[issue.id])
         return prs
 
     def _notify(self, **kwargs):
         """Trigger a desktop notification (if they are enabled)"""
-        if CONFIG["desktop_notifications"]:
+        if self.CONFIG["desktop_notifications"]:
             pync.notify(**kwargs)
 
     def _parse_notification(self, notification):
@@ -205,7 +203,7 @@ class GitHubClient:
     def update(self):
         self.codeowners = {}
         self.team_members = {}
-        logging.info(CONFIG["token"])
+        logging.info(self.CONFIG["token"])
         logging.info("starting update")
         self._update_pull_requests()
         logging.info("done with update")
@@ -267,7 +265,7 @@ class GitHubClient:
     def parse_reviews(self, pull_request):
         reviews = {}
         for review in pull_request.reviews():
-            if review.user.login != CONFIG["user"]:
+            if review.user.login != self.CONFIG["user"]:
                 reviews[review.user.login] = {"state": review.state}
         return reviews
 
@@ -296,7 +294,7 @@ class GitHubClient:
         }
         parsed["owners"] = self.get_pr_codeowners(pull_request, reviews)
 
-        if previous and parsed["author"] == CONFIG["user"]:
+        if previous and parsed["author"] == self.CONFIG["user"]:
             self._state_change_notification(parsed, previous)
         return parsed
 

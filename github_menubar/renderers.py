@@ -26,12 +26,6 @@ TEST_STATUS_MAP = {
 MAX_LENGTH = 100
 MAX_PR_LENGTH = 60
 
-CONFIG = load_config()
-try:
-    PID = int(open(DEFAULT_CONFIG["pid_file"]).read().strip())
-except FileNotFoundError:
-    PID = None
-
 
 def _trimmer(text):
     if len(text) > MAX_PR_LENGTH:
@@ -50,19 +44,24 @@ class Renderer:
     """
 
     def __init__(self):
+        try:
+            self.PID = open(DEFAULT_CONFIG["pid_file"]).read().strip()
+        except FileNotFoundError:
+            self.PID = None
+        self.CONFIG = load_config()
         self.state = self._get_state()
         self.muted_prs = self._get_muted_prs()
         self.error = False
 
     def _get_state(self):
-        response = requests.get(f"http://127.0.0.1:{CONFIG['port']}/state")
+        response = requests.get(f"http://127.0.0.1:{self.CONFIG['port']}/state")
         state = json.loads(response.content)
         for id_ in list(state["pull_requests"]):
             state["pull_requests"][int(id_)] = state["pull_requests"].pop(id_)
         return state
 
     def _get_muted_prs(self):
-        response = requests.get(f"http://127.0.0.1:{CONFIG['port']}/muted")
+        response = requests.get(f"http://127.0.0.1:{self.CONFIG['port']}/muted")
         return json.loads(response.content)
 
     def transform_pr_url(self, api_url):
@@ -73,13 +72,13 @@ class Renderer:
     @property
     def _user_prs(self):
         for pull_request in self.state["pull_requests"].values():
-            if pull_request["author"] == CONFIG["user"] and not pull_request["muted"]:
+            if pull_request["author"] == self.CONFIG["user"] and not pull_request["muted"]:
                 yield pull_request
 
     @property
     def _involved_prs(self):
         for pull_request in self.state["pull_requests"].values():
-            if pull_request["author"] != CONFIG["user"] and not pull_request["muted"]:
+            if pull_request["author"] != self.CONFIG["user"] and not pull_request["muted"]:
                 yield pull_request
 
     @property
@@ -219,7 +218,7 @@ class BitBarRenderer(Renderer):
         n_merge_conflicts = 0
         n_ready = 0
         for pr in self.state["pull_requests"].values():
-            if pr["author"] == CONFIG["user"]:
+            if pr["author"] == self.CONFIG["user"]:
                 n_open_prs += 1
                 if pr["test_status"] == "failure":
                     n_failing_tests += 1
@@ -239,7 +238,7 @@ class BitBarRenderer(Renderer):
         self, n_notifications, n_open_prs, n_failing_tests, n_merge_conflicts, n_ready
     ):
         result = f"{GLYPHS['github_logo']} "
-        if CONFIG["collapsed"]:
+        if self.CONFIG["collapsed"]:
             return result
         if n_notifications:
             result += f"{GLYPHS['bell']}{n_notifications} "
@@ -257,7 +256,7 @@ class BitBarRenderer(Renderer):
         self,
         string,
         indent=0,
-        font=CONFIG["font"],
+        font=self.CONFIG["font"],
         color=None,
         href=None,
         refresh=False,
@@ -296,7 +295,7 @@ class BitBarRenderer(Renderer):
         else:
             header_info = self._get_header_info()
             header = self._build_header(**header_info)
-            self._printer(header, font=CONFIG["font_large"])
+            self._printer(header, font=self.CONFIG["font_large"])
             self._section_break()
             self._printer("SUMMARY")
             self._printer(
@@ -330,7 +329,7 @@ class BitBarRenderer(Renderer):
                         self._printer(
                             row,
                             href='"http://localhost:{}/clear_notification?notif={}&redirect={}"'.format(
-                                CONFIG["port"],
+                                self.CONFIG["port"],
                                 notif_id,
                                 self.state["pull_requests"][pr_id]["browser_url"],
                             ),
@@ -392,7 +391,7 @@ class BitBarRenderer(Renderer):
                             alternate=True,
                             bash="/usr/bin/curl",
                             param1='"localhost:{}/mute_pr?pr={}"'.format(
-                                CONFIG["port"], pull_request["id"]
+                                self.CONFIG["port"], pull_request["id"]
                             ),
                             refresh=True,
                         )
@@ -409,38 +408,38 @@ class BitBarRenderer(Renderer):
                         indent=2,
                         bash="/usr/bin/curl",
                         param1='"localhost:{}/unmute_pr?pr={}"'.format(
-                            CONFIG["port"], pr["id"]
+                            self.CONFIG["port"], pr["id"]
                         ),
                         refresh=True,
                     )
             self._printer(
-                f"{'Disable' if CONFIG['mentions_only'] else 'Enable'} mentions only mode",
+                f"{'Disable' if self.CONFIG['mentions_only'] else 'Enable'} mentions only mode",
                 indent=1,
                 bash="/usr/bin/curl",
-                param1=f"localhost:{CONFIG['port']}/toggle_mentions",
+                param1=f"localhost:{self.CONFIG['port']}/toggle_mentions",
                 refresh=True,
             )
             self._printer(
                 "Force refresh",
                 indent=1,
                 bash="/usr/bin/curl",
-                param1=f"localhost:{CONFIG['port']}/refresh",
+                param1=f"localhost:{self.CONFIG['port']}/refresh",
             )
             self._printer(
                 "Kill server",
                 indent=1,
                 bash="kill",
-                param1=str(PID),
+                param1=self.PID,
                 open_terminal=True
             )
             self._printer(
                 "Open config file",
                 indent=1,
                 bash="$EDITOR",
-                param1=CONFIG["config_file_path"],
+                param1=self.CONFIG["config_file_path"],
                 open_terminal=True
             )
-            self._printer(f"Server PID: {PID}", indent=1)
+            self._printer(f"Server PID: {self.PID}", indent=1)
             if self.state["last_update"]:
                 update_time = datetime.strftime(
                     datetime.utcfromtimestamp(self.state["last_update"]), "%H:%M:%S"
