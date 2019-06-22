@@ -16,7 +16,7 @@ This code is a work-in-progress, but is entirely read-only. You may have some is
 
 ## Getting started
 
-1. Make sure you have a GitHub [personal access token](see https://github.com/settings/tokens) For full functionality, the token should have full repo, user, and notification permissions.
+1. Make sure you have a GitHub [personal access token](https://github.com/settings/tokens) For full functionality, the token should have full repo, user, and notification permissions.
 
 1. Launch BitBar and choose a plugin directory,
 
