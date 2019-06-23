@@ -19,7 +19,7 @@ If you already have GMB configured and running, just pull down the repo, run the
 
 ## Getting started for the first time
 
-1. Make sure you have a GitHub [personal access token](see https://github.com/settings/tokens) For full functionality, the token should have full repo, user, and notification permissions.
+1. Make sure you have a GitHub [personal access token](https://github.com/settings/tokens) For full functionality, the token should have full repo, user, and notification permissions.
 
 2. Clone this repo, and run the install script (`bash install.sh`) from the repo root. BitBar will automatically launch when installation completes.
 
