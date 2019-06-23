@@ -88,6 +88,6 @@ TODO - add basic architecture overview.
  ## Planned future work
 
   - support for other issue mention notificiations
-  - support for copying URLs from the dropdown
+  - Done: ~support for copying URLs from the dropdown~
   - update data persistence to use SQLlite or similar
   - Add terminal-only renderer, to allow usage without BitBar
