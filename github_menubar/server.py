@@ -6,9 +6,12 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from flask import Flask, jsonify, redirect, request
 
 from github_menubar import CONFIG, GitHubClient
+from github_menubar.utils import load_config, update_config
 
 
 def main():
+
+    config = load_config()
 
     logging.basicConfig(
         filename=CONFIG["log_file"],
@@ -29,7 +32,7 @@ def main():
     sched.add_job(
         update,
         "interval",
-        seconds=CONFIG["update_interval"],
+        seconds=config["update_interval"],
         next_run_time=datetime.datetime.now(),
     )
     sched.start()
@@ -62,10 +65,10 @@ def main():
         app.client.clear_notification(request.args.get("notif"))
         return redirect(request.args.get("redirect"))
 
-    @app.route("/toggle_mentions")
-    def toggle_mentions():
+    @app.route("/update_config")
+    def update_config_value():
         """unmute a pr"""
-        app.client.toggle_mentions_only()
+        update_config(request.args.get("key"), request.args.get("value"))
         return "ok"
 
     @app.route("/refresh")
@@ -74,7 +77,7 @@ def main():
         app.client.update()
         return "ok"
 
-    app.run(port=CONFIG["port"], threaded=True)
+    app.run(port=config["port"], threaded=True)
 
 
 if __name__ == "__main__":

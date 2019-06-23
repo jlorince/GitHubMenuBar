@@ -1,8 +1,8 @@
 import json
 from datetime import datetime
 
-from github_menubar.config import COLORS, CONFIG as DEFAULT_CONFIG, GLYPHS, TREX
-from github_menubar.github_client import load_config
+from github_menubar.config import COLORS, CONFIG, GLYPHS, TREX
+from github_menubar.utils import load_config
 
 import requests
 
@@ -44,11 +44,8 @@ class Renderer:
     """
 
     def __init__(self):
-        try:
-            self.PID = open(DEFAULT_CONFIG["pid_file"]).read().strip()
-        except FileNotFoundError:
-            self.PID = None
         self.CONFIG = load_config()
+        self.PID = open(CONFIG["pid_file"]).read().strip()
         self.state = self._get_state()
         self.muted_prs = self._get_muted_prs()
         self.error = False
@@ -71,16 +68,25 @@ class Renderer:
 
     @property
     def _user_prs(self):
-        for pull_request in self.state["pull_requests"].values():
-            if pull_request["author"] == self.CONFIG["user"] and not pull_request["muted"]:
-                yield pull_request
+        return [
+            pull_request
+            for pull_request in self.state["pull_requests"].values()
+            if (
+                pull_request["author"] == self.CONFIG["user"]
+                and not pull_request["muted"]
+            )
+        ]
 
     @property
     def _involved_prs(self):
-        for pull_request in self.state["pull_requests"].values():
-            if pull_request["author"] != self.CONFIG["user"] and not pull_request["muted"]:
-                yield pull_request
-
+        return [
+            pull_request
+            for pull_request in self.state["pull_requests"].values()
+            if (
+                pull_request["author"] != self.CONFIG["user"]
+                and not pull_request["muted"]
+            )
+        ]
     @property
     def _pr_urls(self):
         return {pr["url"]: pr for pr in self.state["pull_requests"].values()}
@@ -109,7 +115,7 @@ class BitBarRenderer(Renderer):
                 rows, headers=["PR", "author", "state", ""], tablefmt="plain"
             ).split("\n"),
             ids,
-            notif_ids
+            notif_ids,
         )
 
     def _colorize_pr(self, pull_request):
@@ -202,7 +208,10 @@ class BitBarRenderer(Renderer):
             for user, review in pr["reviews"].items():
                 glyph = GLYPHS[REVIEW_STATE_MAP[review["state"]]]
                 rows.append([user, glyph])
-            result.append(tabulate(rows, tablefmt="plain").split("\n"))
+            if rows:
+                result.append(tabulate(rows, tablefmt="plain").split("\n"))
+            else:
+                result.append(None)
         return result
 
     def _get_header_info(self):
@@ -256,7 +265,7 @@ class BitBarRenderer(Renderer):
         self,
         string,
         indent=0,
-        font=self.CONFIG["font"],
+        font=None,
         color=None,
         href=None,
         refresh=False,
@@ -266,6 +275,7 @@ class BitBarRenderer(Renderer):
         param2=None,
         open_terminal=False,
     ):
+        font = font or self.CONFIG["font"]
         if string is not None:
             result = f"{'--' * indent}{string}|{font} length={MAX_LENGTH}"
             if color:
@@ -284,8 +294,57 @@ class BitBarRenderer(Renderer):
                 result += f" param2={param2}"
             print(result)
 
+    def _copy(self, string, copy, indent=0):
+        self._printer(
+            "Copy URL",
+            indent=indent,
+            bash="/bin/bash",
+            param1="-c",
+            param2="'printf {} | pbcopy'".format(copy),
+        )
+
     def _section_break(self, indent=0):
         print(f"{'--' * indent}---")
+
+    def _pr_section(self, pull_requests, name, muteable=False):
+        pr_table, ids = self._build_pr_table(pull_requests)
+        codeowner_info = self._build_codeowners_tables(pull_requests)
+        review_info = self._build_review_tables(pull_requests)
+        self._section_break()
+        self._printer(name)
+        self._printer(pr_table[0])
+        if muteable:
+            self._printer("Click to mute a PR", alternate=True)
+        for row, id_, codeowners, reviews in zip(
+            pr_table[1:], ids, codeowner_info, review_info
+        ):
+            pull_request = self.state["pull_requests"][id_]
+            self._printer(
+                row,
+                color=self._colorize_pr(pull_request),
+                href=pull_request["browser_url"],
+            )
+            self._copy("Copy URL", indent=1, copy=pull_request["url"])
+            if codeowners:
+                self._section_break(indent=1)
+                self._printer("Code owner groups", indent=1)
+                for line, color in zip(*codeowners):
+                    self._printer(line, indent=1)
+            if reviews:
+                self._section_break(indent=1)
+                self._printer("Reviews", indent=1)
+                for line in reviews:
+                    self._printer(line, indent=1)
+            if muteable:
+                self._printer(
+                    f"{row.rsplit(maxsplit=3)[0]}",
+                    alternate=True,
+                    bash="/usr/bin/curl",
+                    param1='"localhost:{}/mute_pr?pr={}"'.format(
+                        self.CONFIG["port"], pull_request["id"]
+                    ),
+                    refresh=True,
+                )
 
     def print_state(self):
         if self.error:
@@ -325,78 +384,50 @@ class BitBarRenderer(Renderer):
                 if len(notif_pr_table) > 1:
                     self._printer("NOTIFICATIONS")
                     self._printer(notif_pr_table[0])
-                    for row, pr_id, notif_id in zip(notif_pr_table[1:], pr_ids, notif_ids):
+                    for row, pr_id, notif_id in zip(
+                        notif_pr_table[1:], pr_ids, notif_ids
+                    ):
+                        url = self.state["pull_requests"][pr_id]["browser_url"]
                         self._printer(
                             row,
                             href='"http://localhost:{}/clear_notification?notif={}&redirect={}"'.format(
-                                self.CONFIG["port"],
-                                notif_id,
-                                self.state["pull_requests"][pr_id]["browser_url"],
+                                self.CONFIG["port"], notif_id, url
                             ),
                             refresh=True,
                         )
-                user_pr_table, ids = self._build_pr_table(self._user_prs)
-                codeowner_info = self._build_codeowners_tables(self._user_prs)
-                review_info = self._build_review_tables(self._user_prs)
-                if len(user_pr_table) > 1:
-                    self._section_break()
-                    self._printer("MY PULL REQUESTS")
-                    self._printer(user_pr_table[0])
-                    for row, id_, codeowners, reviews in zip(
-                        user_pr_table[1:], ids, codeowner_info, review_info
-                    ):
-                        pull_request = self.state["pull_requests"][id_]
-                        self._printer(
-                            row,
-                            color=self._colorize_pr(pull_request),
-                            href=pull_request["browser_url"],
-                        )
-                        if codeowners:
-                            self._printer("Code owner groups", indent=1)
-                            for line, color in zip(*codeowners):
-                                self._printer(line, indent=1)
-                        if reviews:
-                            self._section_break(indent=1)
-                            self._printer("Reviews", indent=1)
-                            for line in reviews:
-                                self._printer(line, indent=1)
-                involved_pr_table, ids = self._build_pr_table(self._involved_prs)
-                codeowner_info = self._build_codeowners_tables(self._involved_prs)
-                review_info = self._build_review_tables(self._involved_prs)
-                if len(involved_pr_table) > 1:
-                    self._section_break()
-                    self._printer("WATCHING")
-                    self._printer(involved_pr_table[0])
-                    self._printer("Click to mute a PR", alternate=True)
-                    for row, id_, codeowners, reviews in zip(
-                        involved_pr_table[1:], ids, codeowner_info, review_info
-                    ):
-                        pull_request = self.state["pull_requests"][id_]
-                        self._printer(
-                            row,
-                            color=self._colorize_pr(pull_request),
-                            href=pull_request["browser_url"],
-                        )
-                        if codeowners:
-                            self._printer("Code owner groups", indent=1)
-                            for line, color in zip(*codeowners):
-                                self._printer(line, indent=1)
-                        if reviews:
-                            self._section_break(indent=1)
-                            self._printer("Reviews", indent=1)
-                            for line in reviews:
-                                self._printer(line, indent=1)
-                        self._printer(
-                            f"{row.rsplit(maxsplit=3)[0]}",
-                            alternate=True,
-                            bash="/usr/bin/curl",
-                            param1='"localhost:{}/mute_pr?pr={}"'.format(
-                                self.CONFIG["port"], pull_request["id"]
-                            ),
-                            refresh=True,
-                        )
+                        self._copy("Copy URL", indent=1, copy=url)
+
+                if self._user_prs:
+                    self._pr_section(self._user_prs, "MY PULL REQUESTS")
+
+                if self._involved_prs:
+                    self._pr_section(self._involved_prs, "WATCHING", muteable=True)
 
             self._section_break()
+            self._printer("Options")
+            self._printer(
+                f"{'Disable' if self.CONFIG['mentions_only'] else 'Enable'} mentions only mode",
+                indent=1,
+                bash="/usr/bin/curl",
+                param1=f"localhost:{self.CONFIG['port']}/update_config?key=mentions_only&value={not self.CONFIG['mentions_only']}",
+                refresh=True,
+            )
+            self._printer(
+                f"{'Expand' if self.CONFIG['collapsed'] else 'Collapse'} MenuBar icons",
+                indent=1,
+                bash="/usr/bin/curl",
+                param1=f"localhost:{self.CONFIG['port']}/update_config?key=collapsed&value={not self.CONFIG['collapsed']}",
+                refresh=True,
+            )
+            self._section_break(indent=1)
+            self._printer(
+                "Open config file",
+                indent=1,
+                bash="nano",
+                param1=CONFIG["config_file_path"],
+                open_terminal=True,
+            )
+
             self._printer("Utilities")
             if self.muted_prs:
                 self._printer("Muted pull requests", indent=1)
@@ -412,13 +443,7 @@ class BitBarRenderer(Renderer):
                         ),
                         refresh=True,
                     )
-            self._printer(
-                f"{'Disable' if self.CONFIG['mentions_only'] else 'Enable'} mentions only mode",
-                indent=1,
-                bash="/usr/bin/curl",
-                param1=f"localhost:{self.CONFIG['port']}/toggle_mentions",
-                refresh=True,
-            )
+
             self._printer(
                 "Force refresh",
                 indent=1,
@@ -430,15 +455,9 @@ class BitBarRenderer(Renderer):
                 indent=1,
                 bash="kill",
                 param1=self.PID,
-                open_terminal=True
+                open_terminal=True,
             )
-            self._printer(
-                "Open config file",
-                indent=1,
-                bash="$EDITOR",
-                param1=self.CONFIG["config_file_path"],
-                open_terminal=True
-            )
+            self._section_break(indent=1)
             self._printer(f"Server PID: {self.PID}", indent=1)
             if self.state["last_update"]:
                 update_time = datetime.strftime(

@@ -14,10 +14,10 @@ setup(
         "tabulate",
         "psutil",
         "pync",
-        "python-dotenv",
         "flask",
         "requests",
         "apscheduler",
+        "ruamel.yaml"
     ],
     entry_points={"console_scripts": ["gmb-server=github_menubar.server:main"]},
     zip_safe=False,

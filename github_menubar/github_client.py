@@ -5,20 +5,10 @@ import time
 import github3
 from github3.exceptions import ForbiddenError, NotFoundError
 
-from github_menubar.config import CONFIG as DEFAULT_CONFIG
+from github_menubar.config import CONFIG
+from github_menubar.utils import load_config
 
 import pync
-
-
-def load_config():
-    try:
-        config_file_content = open(DEFAULT_CONFIG["config_file_path"]).read()
-        json_content = config_file_content.split(
-            "##### DO NOT DELETE OR MODIFY THIS LINE #####"
-        )[1].strip()
-        return json.loads(json_content)
-    except Exception:
-        return DEFAULT_CONFIG
 
 
 class GitHubClient:
@@ -35,15 +25,13 @@ class GitHubClient:
             self.team_members = {}
             self.mentioned = set()
             self.last_update = None
-            self.mentions_only = self.CONFIG.get("mentions_only") or False
-
-    def toggle_mentions_only(self):
-        self.mentions_only = not self.mentions_only
 
     def get_state(self, mentions_only=None):
         """Get the current state as a JSON-serializable dictionary"""
         _mentions_only = (
-            mentions_only if mentions_only is not None else self.mentions_only
+            mentions_only
+            if mentions_only is not None
+            else load_config()["mentions_only"]
         )
         if _mentions_only:
             pull_requests = {
@@ -55,7 +43,8 @@ class GitHubClient:
                 notif_id: notif
                 for notif_id, notif in self.notifications.items()
                 if notif.get("pr_id") in self.mentioned
-                or self.pull_requests.get(notif.get("pr_id"), {}).get("author") == self.CONFIG["user"]
+                or self.pull_requests.get(notif.get("pr_id"), {}).get("author")
+                == self.CONFIG["user"]
             }
         else:
             pull_requests = self.pull_requests
@@ -67,12 +56,11 @@ class GitHubClient:
             "team_members": self.team_members,
             "last_update": self.last_update,
             "mentioned": list(self.mentioned),
-            "mentions_only": self.mentions_only,
         }
 
     def _dump_state(self):
         """Dump current state to disk"""
-        with open(self.CONFIG["state_path"], "w") as fh:
+        with open(CONFIG["state_path"], "w") as fh:
             fh.write(json.dumps(self.get_state(mentions_only=False)))
 
     def _transform_pr_url(self, api_url):
@@ -83,7 +71,7 @@ class GitHubClient:
 
     def _load_state(self):
         """load state from disk"""
-        with open(self.CONFIG["state_path"], "r") as fh:
+        with open(CONFIG["state_path"], "r") as fh:
             state = json.loads(fh.read())
             self.notifications = state["notifications"]
             self.pull_requests = state["pull_requests"]
@@ -91,7 +79,6 @@ class GitHubClient:
             self.team_members = state["team_members"]
             self.last_update = state["last_update"]
             self.mentioned = set(state["mentioned"])
-            self.mentions_only = state["mentions_only"]
 
     def rate_limit(self):
         """Get rate limit information from the github3 client"""
@@ -180,14 +167,14 @@ class GitHubClient:
             if pr["id"] in current_pr_ids
         }
 
-    def _update_notifications(self):
+    def _update_notifications(self, mentions_only=False):
         current_notifications = set()
         for notification in self._client.notifications():
             current_notifications.add(notification.id)
             if notification.id not in self.notifications:
                 parsed = self._parse_notification(notification)
                 self.notifications[notification.id] = parsed
-                if not self.mentions_only or notification["pr_id"] in self.mentioned:
+                if not mentions_only or notification["pr_id"] in self.mentioned:
                     self._notify(
                         title="New Notification",
                         message=notification.subject["title"],
@@ -207,7 +194,7 @@ class GitHubClient:
         logging.info("starting update")
         self._update_pull_requests()
         logging.info("done with update")
-        self._update_notifications()
+        self._update_notifications(mentions_only=load_config()["mentions_only"])
         self._dump_state()
         self.last_update = time.time()
 
@@ -233,7 +220,9 @@ class GitHubClient:
     def get_pr_codeowners(self, pr, reviews):
         all_owners = {}
         for file in pr.files():
-            codeowner_info = self.codeowners.get(f"{pr.repository.owner.login}|{pr.repository.name}")
+            codeowner_info = self.codeowners.get(
+                f"{pr.repository.owner.login}|{pr.repository.name}"
+            )
             if codeowner_info:
                 for path, owners in codeowner_info:
                     if path in f"/{file.filename}":
@@ -254,7 +243,8 @@ class GitHubClient:
                                             break
                                     else:
                                         if any(
-                                            user == owner and review["state"] == "APPROVED"
+                                            user == owner
+                                            and review["state"] == "APPROVED"
                                             for user, review in reviews.items()
                                         ):
                                             approved = True

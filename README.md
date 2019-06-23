@@ -13,28 +13,21 @@ This code is a work-in-progress, but is entirely read-only. You may have some is
  - [Nerd fonts](https://github.com/ryanoasis/nerd-fonts) (handled by install script)
  - [teminal-notifier](https://github.com/julienXX/terminal-notifier) (Optional, handled by install script)
 
+## Updating
 
-## Getting started
+If you already have GMB configured and running, just pull down the repo, run the install script again, and you're all set!
+
+## Getting started for the first time
 
 1. Make sure you have a GitHub [personal access token](see https://github.com/settings/tokens) For full functionality, the token should have full repo, user, and notification permissions.
 
-1. Launch BitBar and choose a plugin directory,
+2. Clone this repo, and run the install script (`bash install.sh`) from the repo root. BitBar will automatically launch when installation completes.
 
-3. Clone this repo, and run the install script `bash install.sh` from the repo root.
+3. If you had BitBar installed prior to installation, the install script should have copied the auto-generated script to your BitBar plugins directory, so move on to step 4. If not, when the BitBar app launches it will prompt you to select your plugins directory. Do so, and copy `GitHubMenuBar.5s.py` from repo root to the plugins directory (this file will have been generated automatically by the install script).
 
-4. Copy the file `GitHubMenuBar.5s.py` to the plugins directory you configured in step 2. The `.5s` naming convention tells BitBar to run this script every 5s. Feel free to modify the update frequency, keeping in mind this is only the interval at which the UI updates to match the server state, *not* how often the server does a data refresh with GitHub.
+4, At this point BitBar should be running and you'll see a GitHub icon in your MenuBar. Click it, and select the open to setup GMB. This will open a config file in your terminal.
 
-5. Ensure that the shebang in `GitHubMenuBar.5s.py` matches your system Python.
-
-    IMPORTANT! If you're using Pyenv, you're shebang will also need to include the value of PYENV_VERSION environment variable. An example shebang would thus look like:
-    `#!/usr/bin/env PYTHONIOENCODING=UTF-8 PYENV_VERSION=py-3.6.3 /path/to/pyenv/python`
-
-6. Launch the Bitbar app! The first time the plugin runs, click the GitHub logo, then select "Click to setup GitHubMenuBar" and follow the instructions to setup your config file.
-
-## Updating
-
-Proper version managment is a TODO, so for now just pull the repo, and re-run the install script. Your settings are saved in your home directory and will be preserved.
-
+5. Set your GitHub access token and username in the config file, and you're all set.
 
 ## How does it work?
 
@@ -80,6 +73,11 @@ TODO - add basic architecture overview.
     - an option to force the server to refresh data from GitHub
     - access your configuration file
     - kill the gmb server (triggering an auto-restart)
+
+## Debugging
+
+ - The install script should automatically configure this, but if you're seeing import issues, double-chceck that that the shebang in `GitHubMenuBar.5s.py` matches your system Python. If you're using Pyenv, you're shebang will also need to include the value of PYENV_VERSION environment variable. An example would thus look like:
+    `#!/usr/bin/env PYTHONIOENCODING=UTF-8 PYENV_VERSION=py-3.6.3 /path/to/pyenv/python`
 
 
 ## Known issues
