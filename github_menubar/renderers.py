@@ -1,11 +1,13 @@
 import json
 from datetime import datetime
+import random
 
 from github_menubar.config import COLORS, CONFIG, GLYPHS, TREX
 from github_menubar.utils import load_config
 
 import requests
 
+from github3 import octocat
 from tabulate import tabulate
 
 
@@ -21,6 +23,17 @@ TEST_STATUS_MAP = {
     "failure": "error",
     "cancelled": "cancelled",
     "neutral": "in_progress",
+    "in_progress": "in_progress"
+}
+MERGE_STATE_COLOR_MAP = {
+    "behind": "orange",
+    "blocked": "orange",
+    "clean": "green",
+    "dirty": "red",
+    "draft": "orange",
+    "has_hooks": "green",
+    "unknown": "orange",
+    "unstable": "orange"
 }
 
 MAX_LENGTH = 100
@@ -126,10 +139,8 @@ class BitBarRenderer(Renderer):
             or pull_request["mergeable"] is False
         ):
             color = COLORS["red"]
-        elif pull_request["mergeable_state"] == "clean":
-            color = COLORS["green"]
         else:
-            color = COLORS["orange"]
+            color = MERGE_STATE_COLOR_MAP[pull_request["mergeable_state"]]
 
         return color
 
@@ -159,6 +170,7 @@ class BitBarRenderer(Renderer):
             rows.append(
                 [
                     _trimmer(pull_request["description"]),
+                    pull_request["mergeable_state"],
                     merge_conflict,
                     test_status,
                     approved,
@@ -170,9 +182,11 @@ class BitBarRenderer(Renderer):
                 rows,
                 headers=[
                     "description",
+                    "status",
                     GLYPHS["merged_pr"],
                     GLYPHS["tests"],
                     GLYPHS["approval"],
+
                 ],
                 tablefmt="plain",
             ).split("\n"),
@@ -294,27 +308,17 @@ class BitBarRenderer(Renderer):
                 result += f" param2={param2}"
             print(result)
 
-    def _copy(self, string, copy, indent=0):
-        self._printer(
-            "Copy URL",
-            indent=indent,
-            bash="/bin/bash",
-            param1="-c",
-            param2="'printf {} | pbcopy'".format(copy),
-        )
-
     def _section_break(self, indent=0):
         print(f"{'--' * indent}---")
 
-    def _pr_section(self, pull_requests, name, muteable=False):
+    def _pr_section(self, pull_requests, name):
         pr_table, ids = self._build_pr_table(pull_requests)
         codeowner_info = self._build_codeowners_tables(pull_requests)
         review_info = self._build_review_tables(pull_requests)
         self._section_break()
         self._printer(name)
         self._printer(pr_table[0])
-        if muteable:
-            self._printer("Click to mute a PR", alternate=True)
+        self._printer("Click to copy URL", alternate=True)
         for row, id_, codeowners, reviews in zip(
             pr_table[1:], ids, codeowner_info, review_info
         ):
@@ -324,7 +328,16 @@ class BitBarRenderer(Renderer):
                 color=self._colorize_pr(pull_request),
                 href=pull_request["browser_url"],
             )
-            self._copy("Copy URL", indent=1, copy=pull_request["url"])
+            self._printer(
+                f"Mute PR",
+                bash="/usr/bin/curl",
+                param1='"localhost:{}/mute_pr?pr={}"'.format(
+                    self.CONFIG["port"], pull_request["id"]
+                ),
+                refresh=True,
+                indent=1
+            )
+            self._section_break(indent=1)
             if codeowners:
                 self._section_break(indent=1)
                 self._printer("Code owner groups", indent=1)
@@ -335,16 +348,14 @@ class BitBarRenderer(Renderer):
                 self._printer("Reviews", indent=1)
                 for line in reviews:
                     self._printer(line, indent=1)
-            if muteable:
-                self._printer(
-                    f"{row.rsplit(maxsplit=3)[0]}",
-                    alternate=True,
-                    bash="/usr/bin/curl",
-                    param1='"localhost:{}/mute_pr?pr={}"'.format(
-                        self.CONFIG["port"], pull_request["id"]
-                    ),
-                    refresh=True,
-                )
+            self._printer(
+                f"{row.rsplit(maxsplit=3)[0]}",
+                alternate=True,
+                bash="/bin/bash",
+                param1="-c",
+                param2="'printf {} | pbcopy'".format(pull_request["browser_url"]),
+            )
+
 
     def print_state(self):
         if self.error:
@@ -378,12 +389,16 @@ class BitBarRenderer(Renderer):
             )
             self._section_break()
             if len(self.state["pull_requests"]) == 0:
-                self._printer(TREX)
+                if random.random() > 0.5:
+                    self._printer(TREX)
+                else:
+                    self._printer(octocat())
             else:
                 notif_pr_table, pr_ids, notif_ids = self._build_notification_pr_table()
                 if len(notif_pr_table) > 1:
                     self._printer("NOTIFICATIONS")
                     self._printer(notif_pr_table[0])
+                    self._printer("Click to copy URL", alternate=True)
                     for row, pr_id, notif_id in zip(
                         notif_pr_table[1:], pr_ids, notif_ids
                     ):
@@ -395,13 +410,19 @@ class BitBarRenderer(Renderer):
                             ),
                             refresh=True,
                         )
-                        self._copy("Copy URL", indent=1, copy=url)
+                        self._printer(
+                            f"{row.rsplit(maxsplit=3)[0]}",
+                            alternate=True,
+                            bash="/bin/bash",
+                            param1="-c",
+                            param2="'printf {} | pbcopy'".format(url),
+                        )
 
                 if self._user_prs:
                     self._pr_section(self._user_prs, "MY PULL REQUESTS")
 
                 if self._involved_prs:
-                    self._pr_section(self._involved_prs, "WATCHING", muteable=True)
+                    self._pr_section(self._involved_prs, "WATCHING")
 
             self._section_break()
             self._printer("Options")
@@ -451,7 +472,7 @@ class BitBarRenderer(Renderer):
                 param1=f"localhost:{self.CONFIG['port']}/refresh",
             )
             self._printer(
-                "Kill server",
+                "Bounce server",
                 indent=1,
                 bash="kill",
                 param1=self.PID,

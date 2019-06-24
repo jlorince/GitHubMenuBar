@@ -134,11 +134,22 @@ class GitHubClient:
         notif["pr_url"] = corresponding_pr["browser_url"] if corresponding_pr else None
         return notif
 
+    def _get_full_repo(self, pull_request):
+        short_repo = pull_request.repository
+        return self._client.repository(short_repo.owner.login, short_repo.name)
+
+    def _get_protection(self, pull_request):
+        full_repo = self._get_full_repo(pull_request)
+        return full_repo.branch(pull_request.base.ref).original_protection
+
     def _update_pull_requests(self):
         pull_requests = []
+        self.protection = {}
         for pull_request in self.get_pull_requests():
             repo = pull_request.repository
             repo_key = f"{repo.owner.login}|{repo.name}"
+            if pull_request.base.ref not in self.protection:
+                self.protection[pull_request.base.ref] = self._get_protection(pull_request)
             if repo_key not in self.codeowners:
                 try:
                     codeowner_file = pull_request.repository.file_contents("CODEOWNERS")
@@ -269,6 +280,7 @@ class GitHubClient:
         reviews = self.parse_reviews(pull_request)
         previous = self.pull_requests.get(pull_request.id, {})
         parsed = {
+            "base": pull_request.base.ref,
             "mergeable": pull_request.mergeable,
             "mergeable_state": pull_request.mergeable_state,
             "description": self._format_pr_description(pull_request),
@@ -306,18 +318,21 @@ class GitHubClient:
             )
 
     def _get_test_status(self, pull_request):
-        # Get last commit
-        # TODO - is there a way we can just get the most recent one?
-        commit = None
-        for commit in pull_request.commits():
-            pass
-        try:
-            commit.check_suites().next()
-            test_status = "pending"
-        except StopIteration:
-            test_status = None
-        for check in commit.check_runs():
-            if check.name == "pull-request-tests":
-                test_status = check.conclusion
-                break
-        return test_status
+        repo = self._get_full_repo(pull_request)
+        commit = repo.commit(repo.branch(pull_request.head.ref).latest_sha())
+        protected = self.protection[pull_request.base.ref]["enabled"]
+        if protected:
+            conclusions = set()
+            for check in commit.check_runs():
+                if check.name in self.protection[pull_request.base.ref]['required_status_checks'].get('contexts', []):
+                    if check.status == "completed":
+                        conclusions.add(check.conclusion)
+                    else:
+                        return "in_progress"
+            if conclusions:
+                if "failure" in conclusions or "timed_out" in conclusions or "action_required" in conclusions:
+                    return "failure"
+                if "cancelled" in conclusions:
+                    return "cancelled"
+                return "success"
+        return None

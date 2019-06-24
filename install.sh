@@ -4,7 +4,7 @@ PID_FILE=/tmp/github_menubar.pid
 if test -f $PID_FILE; then
     kill $(cat $PID_FILE)
 fi
-rm ~/.github_menubar.state.yaml
+rm ~/.github_menubar.state.json
 
 brew cask install bitbar
 brew tap homebrew/cask-fonts
@@ -14,7 +14,7 @@ brew install terminal-notifier
 
 shebang="#!/usr/bin/env PYTHONIOENCODING=UTF-8 "
 if [ -n "$PYENV_VERSION" ]; then
-    shebang=$shebang$PYENV_VERSION
+    shebang="$shebang PYENV_VERSION=$PYENV_VERSION "
 fi
 shebang=$shebang$(which python)
 
