@@ -16,6 +16,7 @@ REVIEW_STATE_MAP = {
     "APPROVED": "success",
     "CHANGES_REQUESTED": "error",
     "DISMISSED": "x",
+    "PENDING": "in_progress"
 }
 TEST_STATUS_MAP = {
     "pending": "in_progress",
