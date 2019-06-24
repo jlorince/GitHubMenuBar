@@ -48,7 +48,7 @@ TODO - add basic architecture overview.
      - The number of PRs you have with merge conflicts
      - The number of PRs you have that are mergeable
 
-    Each icon only appears if the count is > 0, and the GitHub icon is always present.
+    Each icon only appears if the count is > 0, and the GitHub icon is always present. If the app takes up too much space in your menubar, you can select "Collapse MenuBar icons" in the options menu to only show the logo at all times.
 
     Clicking on the MenuBar item activates a dropdown with with following sections:
 
@@ -65,29 +65,25 @@ TODO - add basic architecture overview.
 ### Interactions
 
  - Clicking a notification or pull request links to the relevant PR on GitHub (and clears the notification)
- - Hovering over a PR shows codeowner and review information for the PR.
- - Option-clicking a PR mutes it, hiding it from the interface
+ - Hovering over a PR shows codeowner and review information for the PR, and gives an option to mute it. If you mute a PR, it will be hidden from the interface and you won't receive any notifications for it (you can view and unmute muted PRs through the utilities menu).
+ - Option-clicking a PR or notification copies the corresponding URL to the clipboard.
  - The utilities sub-menu includes options to:
-    - Access and unmute and muted PRs
-    - View the PID of the GMB server process and the time of the last data refresh
-    - an option to force the server to refresh data from GitHub
-    - access your configuration file
+    - access and unmute muted PRs
+    - view the PID of the GMB server process and the time of the last data refresh
+    - force the server to refresh data from GitHub
     - kill the gmb server (triggering an auto-restart)
 
 ## Debugging
 
- - The install script should automatically configure this, but if you're seeing import issues, double-chceck that that the shebang in `GitHubMenuBar.5s.py` matches your system Python. If you're using Pyenv, you're shebang will also need to include the value of PYENV_VERSION environment variable. An example would thus look like:
-    `#!/usr/bin/env PYTHONIOENCODING=UTF-8 PYENV_VERSION=py-3.6.3 /path/to/pyenv/python`
-
-
-## Known issues
-
- - The logic for determining test status is idiosyncratic to how my company handles pull request tests. You will likely need to modify the `_get_test_status` method of [github_client.py](https://github.com/jlorince/GitHubMenuBar/blob/master/github_menubar/github_client.py) to work for your testing workflow.
+ - The install script should automatically configure this, but if you're seeing python import issues, double-check that that the shebang in `GitHubMenuBar.5s.py` matches your system Python. If you're using Pyenv, you're shebang will also need to include the value of PYENV_VERSION environment variable. An example would thus look like:
+    `#!/usr/bin/env PYTHONIOENCODING=UTF-8 PYENV_VERSION=py-3.6.3 /path/to/pyenv/python
 
 
  ## Planned future work
 
   - support for other issue mention notificiations
-  - support for copying URLs from the dropdown
+  - Done: ~support for copying URLs from the dropdown~
   - update data persistence to use SQLlite or similar
-  - Add terminal-only renderer, to allow usage without BitBar
+  - Add terminal-only renderer, to allow usage without BitBar (though this sorta makes the name inaccurate...)
+  - Support for team mention notifications.
+  - More PR metadata (test details, etc.) available in sub-menus
