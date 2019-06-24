@@ -34,7 +34,7 @@ MERGE_STATE_COLOR_MAP = {
     "draft": "orange",
     "has_hooks": "green",
     "unknown": "orange",
-    "unstable": "orange"
+    "unstable": "green"
 }
 
 MAX_LENGTH = 100
