@@ -63,7 +63,10 @@ def main():
     def clear_notification():
         """unmute a pr"""
         app.client.clear_notification(request.args.get("notif"))
-        return redirect(request.args.get("redirect"))
+        redirect_url = request.args.get("redirect")
+        if redirect_url:
+            return redirect(redirect_url)
+        return "ok"
 
     @app.route("/update_config")
     def update_config_value():

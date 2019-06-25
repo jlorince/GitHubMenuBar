@@ -357,7 +357,6 @@ class BitBarRenderer(Renderer):
                 param2="'printf {} | pbcopy'".format(pull_request["browser_url"]),
             )
 
-
     def print_state(self):
         if self.error:
             self._printer(GLYPHS["github_logo"])
@@ -410,6 +409,15 @@ class BitBarRenderer(Renderer):
                                 self.CONFIG["port"], notif_id, url
                             ),
                             refresh=True,
+                        )
+                        self._printer(
+                            f"Dismiss",
+                            bash="/usr/bin/curl",
+                            param1='"http://localhost:{}/clear_notification?notif={}"'.format(
+                                self.CONFIG["port"], notif_id
+                            ),
+                            refresh=True,
+                            indent=1
                         )
                         self._printer(
                             f"{row.rsplit(maxsplit=3)[0]}",
