@@ -106,7 +106,7 @@ class Renderer:
 class BitBarRenderer(Renderer):
 
     def _trimmer(self, text):
-        text = text.split(':')
+        text = text.split(':', maxsplit=1)
         pr_title = text[1].strip()
         owner, repo_name = text[0].split("/")
         text = self.CONFIG["format_string"].format(owner=owner, repo_name=repo_name, pr_title=pr_title)
