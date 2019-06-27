@@ -16,7 +16,7 @@ REVIEW_STATE_MAP = {
     "APPROVED": "success",
     "CHANGES_REQUESTED": "error",
     "DISMISSED": "x",
-    "PENDING": "in_progress"
+    "PENDING": "in_progress",
 }
 TEST_STATUS_MAP = {
     "pending": "in_progress",
@@ -24,7 +24,7 @@ TEST_STATUS_MAP = {
     "failure": "error",
     "cancelled": "cancelled",
     "neutral": "in_progress",
-    "in_progress": "in_progress"
+    "in_progress": "in_progress",
 }
 MERGE_STATE_COLOR_MAP = {
     "behind": "orange",
@@ -34,17 +34,12 @@ MERGE_STATE_COLOR_MAP = {
     "draft": "orange",
     "has_hooks": "green",
     "unknown": "orange",
-    "unstable": "green"
+    "unstable": "green",
 }
 
 MAX_LENGTH = 100
 MAX_PR_LENGTH = 60
 
-
-def _trimmer(text):
-    if len(text) > MAX_PR_LENGTH:
-        return f"{text[:MAX_PR_LENGTH]}..."
-    return text
 
 
 def chunkstring(string, length):
@@ -99,35 +94,41 @@ class Renderer:
             if (
                 pull_request["author"] != self.CONFIG["user"]
                 and not pull_request["muted"]
+                and not pull_request.get("closed")
             )
         ]
+
     @property
     def _pr_urls(self):
         return {pr["url"]: pr for pr in self.state["pull_requests"].values()}
 
 
 class BitBarRenderer(Renderer):
+
+    def _trimmer(self, text):
+        text = text.split(':')
+        pr_title = text[1].strip()
+        owner, repo_name = text[0].split("/")
+        text = self.CONFIG["format_string"].format(owner=owner, repo_name=repo_name, pr_title=pr_title)
+        if len(text) > MAX_PR_LENGTH:
+            return f"{text[:MAX_PR_LENGTH]}..."
+        return text
+
     def _build_notification_pr_table(self):
         rows = []
         ids = []
         notif_ids = []
         for notif_id, notification in self.state["notifications"].items():
-            if not notification["cleared"] and notification["url"] in self._pr_urls:
-                pr = self._pr_urls[notification["url"]]
-                rows.append(
-                    [
-                        _trimmer(pr["description"]),
-                        pr["author"],
-                        pr["state"],
-                        notification.get("comment", ""),
-                    ]
-                )
+            pr = self._pr_urls.get(notification["url"])
+            if pr and not notification["cleared"]:
+                desc = self._trimmer(pr["description"])
+                rows.append([desc, pr["author"], pr["state"]])
                 ids.append(pr["id"])
                 notif_ids.append(notif_id)
         return (
-            tabulate(
-                rows, headers=["PR", "author", "state", ""], tablefmt="plain"
-            ).split("\n"),
+            tabulate(rows, headers=["PR", "author", "state"], tablefmt="plain").split(
+                "\n"
+            ),
             ids,
             notif_ids,
         )
@@ -170,7 +171,7 @@ class BitBarRenderer(Renderer):
             )
             rows.append(
                 [
-                    _trimmer(pull_request["description"]),
+                    self._trimmer(pull_request["description"]),
                     pull_request["mergeable_state"],
                     merge_conflict,
                     test_status,
@@ -187,7 +188,6 @@ class BitBarRenderer(Renderer):
                     GLYPHS["merged_pr"],
                     GLYPHS["tests"],
                     GLYPHS["approval"],
-
                 ],
                 tablefmt="plain",
             ).split("\n"),
@@ -246,9 +246,9 @@ class BitBarRenderer(Renderer):
                 n_open_prs += 1
                 if pr["test_status"] == "failure":
                     n_failing_tests += 1
-                if not pr["mergeable"]:
+                if pr["mergeable_state"] == "dirty":
                     n_merge_conflicts += 1
-                if pr["mergeable_state"] == "clean":
+                if pr["mergeable_state"] in ("clean", "unstable"):
                     n_ready += 1
         return {
             "n_notifications": n_notifications,
@@ -336,7 +336,14 @@ class BitBarRenderer(Renderer):
                     self.CONFIG["port"], pull_request["id"]
                 ),
                 refresh=True,
-                indent=1
+                indent=1,
+            )
+            self._printer(
+                "Copy branch name",
+                bash="/bin/bash",
+                param1="-c",
+                param2="'printf {} | pbcopy'".format(pull_request["head"]),
+                indent=1,
             )
             self._section_break(indent=1)
             if codeowners:
@@ -389,10 +396,11 @@ class BitBarRenderer(Renderer):
             )
             self._section_break()
             if len(self.state["pull_requests"]) == 0:
-                if random.random() > 0.5:
-                    self._printer(TREX)
-                else:
-                    self._printer(octocat())
+                self._printer(TREX)
+                # if random.random() > 0.5:
+                #     self._printer(TREX)
+                # else:
+                #     self._printer(octocat())
             else:
                 notif_pr_table, pr_ids, notif_ids = self._build_notification_pr_table()
                 if len(notif_pr_table) > 1:
@@ -410,6 +418,8 @@ class BitBarRenderer(Renderer):
                             ),
                             refresh=True,
                         )
+                        self._printer(self.state["pull_requests"][pr_id]["description"], indent=1)
+                        self._section_break(indent=1)
                         self._printer(
                             f"Dismiss",
                             bash="/usr/bin/curl",
@@ -417,8 +427,15 @@ class BitBarRenderer(Renderer):
                                 self.CONFIG["port"], notif_id
                             ),
                             refresh=True,
-                            indent=1
+                            indent=1,
                         )
+                        self._section_break(indent=1)
+                        comment = self.state["notifications"][notif_id].get("comment")
+                        if comment:
+                            self._printer(
+                                f"Latest comment ({comment['user']['login']}):", indent=1
+                            )
+                            self._printer(f"{comment['body_text']}", indent=1)
                         self._printer(
                             f"{row.rsplit(maxsplit=3)[0]}",
                             alternate=True,

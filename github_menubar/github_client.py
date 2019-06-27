@@ -121,18 +121,28 @@ class GitHubClient:
         if self.CONFIG["desktop_notifications"]:
             pync.notify(**kwargs)
 
-    def _parse_notification(self, notification):
-        prs_by_url = {pr["url"]: pr for pr in self.pull_requests.values()}
+    def _parse_notification(self, notification, prs_by_url):
         notif = notification.subject.copy()
         comment_url = notif.get("latest_comment_url", "")
         if comment_url and "comments" in comment_url:
-            comment_info = json.loads(self._client._get(comment_url).content.decode())
-            notif["comment"] = comment_info["body_text"]
+            notif["comment"] = json.loads(self._client._get(comment_url).content.decode())
         notif["cleared"] = False
         corresponding_pr = prs_by_url.get(notification.subject["url"])
+        if corresponding_pr is None and notif["type"] == "PullRequest":
+            corresponding_pr = self._parse_pr_from_notification(notification)
         notif["pr_id"] = corresponding_pr["id"] if corresponding_pr else None
         notif["pr_url"] = corresponding_pr["browser_url"] if corresponding_pr else None
         return notif
+
+    def _parse_pr_from_notification(self, notification):
+        url = notification.subject["url"]
+        url_info = url.replace('https://api.github.com/repos/', '').split('/')
+        pr = self._client.pull_request(url_info[0], url_info[1], int(url_info[3]))
+        parsed = self.parse_pull_request(pr, get_test_status=False)
+        parsed["closed"] = True
+        self.pull_requests[pr.id] = parsed
+        self.current_prs.add(pr.id)
+        return parsed
 
     def _get_full_repo(self, pull_request):
         short_repo = pull_request.repository
@@ -149,7 +159,9 @@ class GitHubClient:
             repo = pull_request.repository
             repo_key = f"{repo.owner.login}|{repo.name}"
             if pull_request.base.ref not in self.protection:
-                self.protection[pull_request.base.ref] = self._get_protection(pull_request)
+                self.protection[pull_request.base.ref] = self._get_protection(
+                    pull_request
+                )
             if repo_key not in self.codeowners:
                 try:
                     codeowner_file = pull_request.repository.file_contents("CODEOWNERS")
@@ -170,20 +182,14 @@ class GitHubClient:
 
         for pr in pull_requests:
             self.pull_requests[pr.id] = self.parse_pull_request(pr)
-        # clear any old pull requests
-        current_pr_ids = {pr.id for pr in pull_requests}
-        self.pull_requests = {
-            pr["id"]: pr
-            for pr in self.pull_requests.values()
-            if pr["id"] in current_pr_ids
-        }
+            self.current_prs.add(pr.id)
 
     def _update_notifications(self, mentions_only=False):
-        current_notifications = set()
+        prs_by_url = {pr["url"]: pr for pr in self.pull_requests.values()}
         for notification in self._client.notifications():
-            current_notifications.add(notification.id)
+            self.current_notifications.add(notification.id)
             if notification.id not in self.notifications:
-                parsed = self._parse_notification(notification)
+                parsed = self._parse_notification(notification, prs_by_url)
                 self.notifications[notification.id] = parsed
                 if not mentions_only or notification["pr_id"] in self.mentioned:
                     self._notify(
@@ -191,21 +197,28 @@ class GitHubClient:
                         message=notification.subject["title"],
                         open=parsed["pr_url"],
                     )
+            else:
+                self.current_prs.add(prs_by_url[notification.subject["url"]]["id"])
+
+    def update(self):
+        self.current_notifications = set()
+        self.current_prs = set()
+        self.codeowners = {}
+        self.team_members = {}
+        self._update_pull_requests()
+        self._update_notifications(mentions_only=load_config()["mentions_only"])
         # clear any old notifications
         self.notifications = {
             id_: notif
             for id_, notif in self.notifications.items()
-            if id_ in current_notifications
+            if id_ in self.current_notifications
         }
-
-    def update(self):
-        self.codeowners = {}
-        self.team_members = {}
-        logging.info(self.CONFIG["token"])
-        logging.info("starting update")
-        self._update_pull_requests()
-        logging.info("done with update")
-        self._update_notifications(mentions_only=load_config()["mentions_only"])
+        # clear any old pull requests
+        self.pull_requests = {
+            pr["id"]: pr
+            for pr in self.pull_requests.values()
+            if pr["id"] in self.current_prs
+        }
         self._dump_state()
         self.last_update = time.time()
 
@@ -276,11 +289,12 @@ class GitHubClient:
             f"{pull_request.number}: {pull_request.title}"
         )
 
-    def parse_pull_request(self, pull_request):
+    def parse_pull_request(self, pull_request, get_test_status=True):
         reviews = self.parse_reviews(pull_request)
         previous = self.pull_requests.get(pull_request.id, {})
         parsed = {
             "base": pull_request.base.ref,
+            "head": pull_request.head.ref,
             "mergeable": pull_request.mergeable,
             "mergeable_state": pull_request.mergeable_state,
             "description": self._format_pr_description(pull_request),
@@ -288,12 +302,13 @@ class GitHubClient:
             "url": pull_request.url,
             "browser_url": pull_request.html_url,
             "author": pull_request.user.login,
-            "test_status": self._get_test_status(pull_request),
             "updated_at": str(pull_request.updated_at),
             "reviews": reviews,
             "muted": previous.get("muted", False),
             "id": pull_request.id,
         }
+        if get_test_status:
+            parsed["test_status"] = self._get_test_status(pull_request)
         parsed["owners"] = self.get_pr_codeowners(pull_request, reviews)
 
         if previous and parsed["author"] == self.CONFIG["user"]:
@@ -310,7 +325,10 @@ class GitHubClient:
                 message=f"{current_pr['test_status']}",
                 open=current_pr["browser_url"],
             )
-        if previous_pr["mergeable"] and not current_pr["mergeable"]:
+        if (
+            current_pr["mergeable_state"] == "dirty"
+            and not previous_pr["mergeable_state"] != "dirty"
+        ):
             self._notify(
                 title="Merge conflict",
                 message=f"{current_pr['description']}",
@@ -324,13 +342,19 @@ class GitHubClient:
         if protected:
             conclusions = set()
             for check in commit.check_runs():
-                if check.name in self.protection[pull_request.base.ref]['required_status_checks'].get('contexts', []):
+                if check.name in self.protection[pull_request.base.ref][
+                    "required_status_checks"
+                ].get("contexts", []):
                     if check.status == "completed":
                         conclusions.add(check.conclusion)
                     else:
                         return "in_progress"
             if conclusions:
-                if "failure" in conclusions or "timed_out" in conclusions or "action_required" in conclusions:
+                if (
+                    "failure" in conclusions
+                    or "timed_out" in conclusions
+                    or "action_required" in conclusions
+                ):
                     return "failure"
                 if "cancelled" in conclusions:
                     return "cancelled"

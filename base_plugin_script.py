@@ -34,6 +34,7 @@ def main(argv):
     if len(argv) == 1:
         try:
             config = load_config()
+
             if config["user"] is None:
                 setup()
                 return

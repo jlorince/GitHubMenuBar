@@ -12,6 +12,8 @@ brew cask install font-hack-nerd-font
 pip install --upgrade .
 brew install terminal-notifier
 
+python -c "from github_menubar.utils import upgrade_config; upgrade_config()"
+
 shebang="#!/usr/bin/env PYTHONIOENCODING=UTF-8 "
 if [ -n "$PYENV_VERSION" ]; then
     shebang="$shebang PYENV_VERSION=$PYENV_VERSION "

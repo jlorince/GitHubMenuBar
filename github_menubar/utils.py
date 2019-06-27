@@ -1,4 +1,4 @@
-from github_menubar.config import CONFIG
+from github_menubar.config import CONFIG, DEFAULT_CONFIG
 
 import ruamel.yaml
 
@@ -35,5 +35,16 @@ def update_config(key, value, new=False):
     yaml = ruamel.yaml.YAML()
     yaml.dump(config, open(CONFIG["config_file_path"], 'w'))
 
+
+def upgrade_config():
+    yaml = ruamel.yaml.YAML()
+    try:
+        existing_config = yaml.load(open(CONFIG["config_file_path"]).read())
+    except Exception:
+        return
+    default_config = yaml.load(DEFAULT_CONFIG)
+    for key, value in existing_config.items():
+        default_config[key] = value
+    yaml.dump(default_config, open(CONFIG["config_file_path"], 'w'))
 
 
