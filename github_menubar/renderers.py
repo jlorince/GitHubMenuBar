@@ -1,13 +1,11 @@
 import json
 from datetime import datetime
-import random
 
 from github_menubar.config import COLORS, CONFIG, GLYPHS, TREX
 from github_menubar.utils import load_config
 
 import requests
 
-from github3 import octocat
 from tabulate import tabulate
 
 
@@ -39,7 +37,6 @@ MERGE_STATE_COLOR_MAP = {
 
 MAX_LENGTH = 100
 MAX_PR_LENGTH = 60
-
 
 
 def chunkstring(string, length):
@@ -92,8 +89,8 @@ class Renderer:
             pull_request
             for pull_request in self.state["pull_requests"].values()
             if (
-                pull_request["author"] != self.CONFIG["user"]
-                and not pull_request["muted"]
+                not pull_request["muted"]
+                and pull_request["author"] != self.CONFIG["user"]
                 and not pull_request.get("closed")
             )
         ]
@@ -329,6 +326,9 @@ class BitBarRenderer(Renderer):
                 color=self._colorize_pr(pull_request),
                 href=pull_request["browser_url"],
             )
+            self._printer(pull_request["description"], indent=1)
+            self._printer(f"Last modified: {pull_request['last_modified']}", indent=1)
+            self._section_break(indent=1)
             self._printer(
                 f"Mute PR",
                 bash="/usr/bin/curl",
@@ -345,7 +345,6 @@ class BitBarRenderer(Renderer):
                 param2="'printf {} | pbcopy'".format(pull_request["head"]),
                 indent=1,
             )
-            self._section_break(indent=1)
             if codeowners:
                 self._section_break(indent=1)
                 self._printer("Code owner groups", indent=1)
@@ -459,6 +458,14 @@ class BitBarRenderer(Renderer):
                 param1=f"localhost:{self.CONFIG['port']}/update_config?key=mentions_only&value={not self.CONFIG['mentions_only']}",
                 refresh=True,
             )
+            if self.CONFIG["mentions_only"]:
+                self._printer(
+                    f"{'Disable' if self.CONFIG['team_mentions'] else 'Enable'} team mentions",
+                    indent=1,
+                    bash="/usr/bin/curl",
+                    param1=f"localhost:{self.CONFIG['port']}/update_config?key=team_mentions&value={not self.CONFIG['team_mentions']}",
+                    refresh=True,
+                )
             self._printer(
                 f"{'Expand' if self.CONFIG['collapsed'] else 'Collapse'} MenuBar icons",
                 indent=1,

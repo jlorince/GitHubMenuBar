@@ -50,6 +50,8 @@ token: null
 desktop_notifications: true
 # If true, you will only be notified for explicit mentions (not review requests).
 mentions_only: false
+# Include mentions for teams you are part of; this parameter is ignored if "mentions_only" is False
+team_mentions: true
 # If True, only show the GitHub logo in the menubar, without additional information. Useful if you
 # don't have much space in your MenuBar
 collapsed: false
