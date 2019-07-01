@@ -101,12 +101,13 @@ class Renderer:
 
 
 class BitBarRenderer(Renderer):
-
     def _trimmer(self, text):
-        text = text.split(':', maxsplit=1)
+        text = text.split(":", maxsplit=1)
         pr_title = text[1].strip()
         owner, repo_name = text[0].split("/")
-        text = self.CONFIG["format_string"].format(owner=owner, repo_name=repo_name, pr_title=pr_title)
+        text = self.CONFIG["format_string"].format(
+            owner=owner, repo_name=repo_name, pr_title=pr_title
+        )
         if len(text) > MAX_PR_LENGTH:
             return f"{text[:MAX_PR_LENGTH]}..."
         return text
@@ -134,7 +135,7 @@ class BitBarRenderer(Renderer):
         if pull_request["state"] == "CLOSED":
             color = "gray"
         elif (
-            pull_request["test_status"] == "failure"
+            pull_request["test_status"]["outcome"] == "failure"
             or pull_request["mergeable"] is False
         ):
             color = COLORS["red"]
@@ -163,8 +164,8 @@ class BitBarRenderer(Renderer):
 
             test_status = (
                 GLYPHS["na"]
-                if pull_request["test_status"] is None
-                else GLYPHS[TEST_STATUS_MAP[pull_request["test_status"]]]
+                if pull_request["test_status"]["outcome"] is None
+                else GLYPHS[TEST_STATUS_MAP[pull_request["test_status"]["outcome"]]]
             )
             rows.append(
                 [
@@ -241,7 +242,7 @@ class BitBarRenderer(Renderer):
         for pr in self.state["pull_requests"].values():
             if pr["author"] == self.CONFIG["user"]:
                 n_open_prs += 1
-                if pr["test_status"] == "failure":
+                if pr["test_status"]["outcome"] == "failure":
                     n_failing_tests += 1
                 if pr["mergeable_state"] == "dirty":
                     n_merge_conflicts += 1
@@ -326,7 +327,9 @@ class BitBarRenderer(Renderer):
                 color=self._colorize_pr(pull_request),
                 href=pull_request["browser_url"],
             )
-            self._printer(pull_request["description"], indent=1)
+            self._printer(f"Organization: {pull_request['org']}", indent=1)
+            self._printer(f"Repository: {pull_request['repo']}", indent=1)
+            self._printer(f"Title: {pull_request['title']}", indent=1)
             self._printer(f"Last modified: {pull_request['last_modified']}", indent=1)
             self._section_break(indent=1)
             self._printer(
@@ -355,6 +358,17 @@ class BitBarRenderer(Renderer):
                 self._printer("Reviews", indent=1)
                 for line in reviews:
                     self._printer(line, indent=1)
+            if pull_request["test_status"]["runs"]:
+                self._section_break(indent=1)
+                self._printer("Checks", indent=1)
+                for check, (outcome, required) in pull_request["test_status"][
+                    "runs"
+                ].items():
+                    self._printer(
+                        f"{'*' if required else ''}{check}: {outcome}",
+                        indent=1,
+                    )
+
             self._printer(
                 f"{row.rsplit(maxsplit=3)[0]}",
                 alternate=True,
@@ -417,7 +431,9 @@ class BitBarRenderer(Renderer):
                             ),
                             refresh=True,
                         )
-                        self._printer(self.state["pull_requests"][pr_id]["description"], indent=1)
+                        self._printer(
+                            self.state["pull_requests"][pr_id]["description"], indent=1
+                        )
                         self._section_break(indent=1)
                         self._printer(
                             f"Dismiss",
@@ -432,7 +448,8 @@ class BitBarRenderer(Renderer):
                         comment = self.state["notifications"][notif_id].get("comment")
                         if comment:
                             self._printer(
-                                f"Latest comment ({comment['user']['login']}):", indent=1
+                                f"Latest comment ({comment['user']['login']}):",
+                                indent=1,
                             )
                             self._printer(f"{comment['body_text']}", indent=1)
                         self._printer(

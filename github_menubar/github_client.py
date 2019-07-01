@@ -301,6 +301,7 @@ class GitHubClient:
                                         ):
                                             approved = True
                                             break
+
                             all_owners["|".join(owners)] = approved
         return all_owners
 
@@ -335,6 +336,9 @@ class GitHubClient:
             "muted": previous.get("muted", False),
             "id": pull_request.id,
             "last_modified": pull_request.last_modified,
+            "repo": pull_request.repository.name,
+            "org": pull_request.repository.owner.login,
+            "title": pull_request.title,
         }
         if get_test_status:
             parsed["test_status"] = self._get_test_status(pull_request)
@@ -345,13 +349,13 @@ class GitHubClient:
         return parsed
 
     def _state_change_notification(self, current_pr, previous_pr):
-        if (current_pr["test_status"] != "pending") and (
-            previous_pr["test_status"] != current_pr["test_status"]
+        if (current_pr["test_status"]["outcome"] != "pending") and (
+            previous_pr["test_status"]["outcome"] != current_pr["test_status"]["outcome"]
         ):
             self._notify(
                 title="Test status change",
                 subtitle=f"{current_pr['description']}",
-                message=f"{current_pr['test_status']}",
+                message=f"{current_pr['test_status']['outcome']}",
                 open=current_pr["browser_url"],
             )
         if (
@@ -368,24 +372,28 @@ class GitHubClient:
         repo = self._get_full_repo(pull_request)
         commit = repo.commit(repo.branch(pull_request.head.ref).latest_sha())
         protected = self.protection[pull_request.base.ref]["enabled"]
-        if protected:
-            conclusions = set()
-            for check in commit.check_runs():
-                if check.name in self.protection[pull_request.base.ref][
-                    "required_status_checks"
-                ].get("contexts", []):
-                    if check.status == "completed":
-                        conclusions.add(check.conclusion)
-                    else:
-                        return "in_progress"
-            if conclusions:
-                if (
-                    "failure" in conclusions
-                    or "timed_out" in conclusions
-                    or "action_required" in conclusions
-                ):
-                    return "failure"
-                if "cancelled" in conclusions:
-                    return "cancelled"
-                return "success"
-        return None
+        in_progress = False
+        suite_outcome = None
+        runs = {}
+        conclusions = set()
+        for check in commit.check_runs():
+            required = check.name in self.protection[pull_request.base.ref]["required_status_checks"].get("contexts", [])
+            runs[check.name] = (check.conclusion, required)
+            if required:
+                if check.status == "completed":
+                    conclusions.add(check.conclusion)
+                else:
+                    in_progress = True
+        if in_progress:
+            suite_outcome = "in_progress"
+        if protected and conclusions:
+            if (
+                "failure" in conclusions
+                or "timed_out" in conclusions
+                or "action_required" in conclusions
+            ):
+                suite_outcome = "failure"
+            if "cancelled" in conclusions:
+                suite_outcome = "cancelled"
+            suite_outcome = "success"
+        return {"outcome": suite_outcome if protected else None, "runs": runs}
