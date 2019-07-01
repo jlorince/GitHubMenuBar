@@ -339,9 +339,9 @@ class GitHubClient:
             "repo": pull_request.repository.name,
             "org": pull_request.repository.owner.login,
             "title": pull_request.title,
+            "number": pull_request.number
         }
-        if get_test_status:
-            parsed["test_status"] = self._get_test_status(pull_request)
+        parsed["test_status"] = self._get_test_status(pull_request)
         parsed["owners"] = self.get_pr_codeowners(pull_request, reviews)
 
         if previous and parsed["author"] == self.CONFIG["user"]:
