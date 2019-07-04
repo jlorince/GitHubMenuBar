@@ -135,7 +135,7 @@ class BitBarRenderer(Renderer):
         if pull_request["state"] == "CLOSED":
             color = "gray"
         elif (
-            pull_request["test_status"]["outcome"] == "failure"
+            pull_request["test_status"].get("outcome") == "failure"
             or pull_request["mergeable"] is False
         ):
             color = COLORS["red"]
@@ -164,7 +164,7 @@ class BitBarRenderer(Renderer):
 
             test_status = (
                 GLYPHS["na"]
-                if pull_request["test_status"]["outcome"] is None
+                if pull_request["test_status"].get("outcome") is None
                 else GLYPHS[TEST_STATUS_MAP[pull_request["test_status"]["outcome"]]]
             )
             rows.append(
@@ -242,7 +242,7 @@ class BitBarRenderer(Renderer):
         for pr in self.state["pull_requests"].values():
             if pr["author"] == self.CONFIG["user"]:
                 n_open_prs += 1
-                if pr["test_status"]["outcome"] == "failure":
+                if pr["test_status"] and pr["test_status"].get("outcome") == "failure":
                     n_failing_tests += 1
                 if pr["mergeable_state"] == "dirty":
                     n_merge_conflicts += 1
@@ -359,7 +359,7 @@ class BitBarRenderer(Renderer):
                 self._printer("Reviews", indent=1)
                 for line in reviews:
                     self._printer(line, indent=1)
-            if pull_request["test_status"]["runs"]:
+            if pull_request["test_status"].get("runs"):
                 self._section_break(indent=1)
                 self._printer("Checks", indent=1)
                 for check, (outcome, required) in pull_request["test_status"][
@@ -452,7 +452,7 @@ class BitBarRenderer(Renderer):
                                 f"Latest comment ({comment['user']['login']}):",
                                 indent=1,
                             )
-                            self._printer(f"{comment['body_text']}", indent=1)
+                            self._printer(comment['body_text'].replace('\n', ''), indent=1)
                         self._printer(
                             f"{row.rsplit(maxsplit=3)[0]}",
                             alternate=True,

@@ -227,7 +227,9 @@ class GitHubClient:
                     )
             else:
                 prs_by_url = {pr["url"]: pr for pr in self.pull_requests.values()}
-                self.current_prs.add(prs_by_url[notification.subject["url"]]["id"])
+                associated_pr = prs_by_url.get(notification.subject["url"])
+                if associated_pr:
+                    self.current_prs.add(associated_pr["id"])
 
     def update(self):
         self.current_notifications = {}
@@ -341,7 +343,7 @@ class GitHubClient:
             "title": pull_request.title,
             "number": pull_request.number
         }
-        parsed["test_status"] = self._get_test_status(pull_request)
+        parsed["test_status"] = {} if pull_request.merged else self._get_test_status(pull_request)
         parsed["owners"] = self.get_pr_codeowners(pull_request, reviews)
 
         if previous and parsed["author"] == self.CONFIG["user"]:
