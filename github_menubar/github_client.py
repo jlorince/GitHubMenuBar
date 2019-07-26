@@ -395,7 +395,8 @@ class GitHubClient:
                 or "action_required" in conclusions
             ):
                 suite_outcome = "failure"
-            if "cancelled" in conclusions:
+            elif "cancelled" in conclusions:
                 suite_outcome = "cancelled"
-            suite_outcome = "success"
+            else:
+                suite_outcome = "success"
         return {"outcome": suite_outcome if protected else None, "runs": runs}

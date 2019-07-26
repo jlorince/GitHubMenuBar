@@ -1,3 +1,4 @@
+[flake8]
 # E203: Conflicts with black's formatting
 # E501: Conflicts with black's formatting, which defaults to a max
 #       line length of 88 but will go over if necessary.
