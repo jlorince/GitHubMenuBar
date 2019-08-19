@@ -101,13 +101,8 @@ class Renderer:
 
 
 class BitBarRenderer(Renderer):
-    def _trimmer(self, text):
-        text = text.split(":", maxsplit=1)
-        pr_title = text[1].strip()
-        owner, repo_name = text[0].split("/")
-        text = self.CONFIG["format_string"].format(
-            owner=owner, repo_name=repo_name, pr_title=pr_title
-        )
+    def _format(self, pr):
+        text = self.CONFIG["format_string_v2"].format(**pr)
         if len(text) > MAX_PR_LENGTH:
             return f"{text[:MAX_PR_LENGTH]}..."
         return text
@@ -119,7 +114,7 @@ class BitBarRenderer(Renderer):
         for notif_id, notification in self.state["notifications"].items():
             pr = self._pr_urls.get(notification["url"])
             if pr and not notification["cleared"]:
-                desc = self._trimmer(pr["description"])
+                desc = self._format(pr)
                 rows.append([desc, pr["author"], pr["state"]])
                 ids.append(pr["id"])
                 notif_ids.append(notif_id)
@@ -169,7 +164,7 @@ class BitBarRenderer(Renderer):
             )
             rows.append(
                 [
-                    self._trimmer(pull_request["description"]),
+                    self._format(pull_request),
                     pull_request["mergeable_state"],
                     merge_conflict,
                     test_status,

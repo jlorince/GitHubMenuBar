@@ -58,7 +58,7 @@ collapsed: false
 # Port on which to run the GMB server
 port: 9999
 # PR description format string
-format_string: "{owner}/{repo_name}: {pr_title}"
+format_string_v2: "{org}/{repo}: {title}"
 
 # CHANGING ANY SETTING BELOW THIS LINE IS NOT RECOMMENDED
 
