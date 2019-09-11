@@ -91,7 +91,7 @@ class Renderer:
             if (
                 not pull_request["muted"]
                 and pull_request["author"] != self.CONFIG["user"]
-                and not pull_request.get("closed")
+                and pull_request["state"] not in ("CLOSED", "MERGED")
             )
         ]
 
@@ -406,10 +406,6 @@ class BitBarRenderer(Renderer):
             self._section_break()
             if len(self.state["pull_requests"]) == 0:
                 self._printer(TREX)
-                # if random.random() > 0.5:
-                #     self._printer(TREX)
-                # else:
-                #     self._printer(octocat())
             else:
                 notif_pr_table, pr_ids, notif_ids = self._build_notification_pr_table()
                 if len(notif_pr_table) > 1:
@@ -441,8 +437,8 @@ class BitBarRenderer(Renderer):
                             indent=1,
                         )
                         self._section_break(indent=1)
-                        comment = self.state["notifications"][notif_id].get("comment")
-                        if comment:
+                        comment = self.state["notifications"][notif_id].get("comment", {})
+                        if comment.get('body_text'):
                             self._printer(
                                 f"Latest comment ({comment['user']['login']}):",
                                 indent=1,

@@ -25,7 +25,7 @@ If you already have GMB configured and running, just pull down the repo, run the
 
 3. If you had BitBar installed prior to installation, the install script should have copied the auto-generated script to your BitBar plugins directory, so move on to step 4. If not, when the BitBar app launches it will prompt you to select your plugins directory. Do so, and copy `GitHubMenuBar.5s.py` from repo root to the plugins directory (this file will have been generated automatically by the install script).
 
-4, At this point BitBar should be running and you'll see a GitHub icon in your MenuBar. Click it, and select the open to setup GMB. This will open a config file in your terminal.
+4. At this point BitBar should be running and you'll see a GitHub icon in your MenuBar. Click it, and select the open to setup GMB. This will open a config file in your terminal.
 
 5. Set your GitHub access token and username in the config file, and you're all set.
 

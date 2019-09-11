@@ -158,7 +158,7 @@ class GitHubClient:
         url_info = url.replace("https://api.github.com/repos/", "").split("/")
         pr = self._client.pull_request(url_info[0], url_info[1], int(url_info[3]))
         parsed = self.parse_pull_request(pr, get_test_status=False)
-        parsed["closed"] = True
+        # parsed["closed"] = True
         self.pull_requests[pr.id] = parsed
         self.current_prs.add(pr.id)
         return parsed
@@ -226,6 +226,7 @@ class GitHubClient:
                         open=parsed["pr_url"],
                     )
             else:
+                # continue
                 prs_by_url = {pr["url"]: pr for pr in self.pull_requests.values()}
                 associated_pr = prs_by_url.get(notification.subject["url"])
                 if associated_pr:
