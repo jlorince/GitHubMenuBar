@@ -4,7 +4,8 @@ PID_FILE=/tmp/github_menubar.pid
 if test -f $PID_FILE; then
     kill $(cat $PID_FILE)
 fi
-rm ~/.github_menubar.state.json
+rm -rf ~/.github_menubar
+mkdir ~/.github_menubar
 
 brew cask install bitbar
 brew tap homebrew/cask-fonts

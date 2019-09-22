@@ -1,20 +1,30 @@
+import datetime
 import json
 import logging
+import os
+import sys
 import time
+import webbrowser
 
+from apscheduler.schedulers.background import BackgroundScheduler
 import github3
 from github3.exceptions import ForbiddenError, NotFoundError
+import psutil
+import pync
+import ZEO
+from ZEO.ClientStorage import ClientStorage
+from ZODB import DB
 
 from github_menubar.config import CONFIG
-from github_menubar.utils import load_config
-
-import pync
+from github_menubar.utils import load_config, update_config
 
 
 class GitHubClient:
-    def __init__(self):
-        """Initialize the GitHub client and load state from disk"""
+    def __init__(self) -> None:
+        """Initialize the GitHub client and load state from db"""
         self.CONFIG = load_config()
+        self.storage = ClientStorage(self.CONFIG["port"])
+        self.db = DB(self.storage)
         self._client = github3.login(token=self.CONFIG["token"])
         try:
             self._load_state()
@@ -27,44 +37,110 @@ class GitHubClient:
             self.team_mentioned = set()
             self.last_update = None
 
-    def get_state(self, mentions_only=None):
-        """Get the current state as a JSON-serializable dictionary"""
+    @classmethod
+    def run_server(cls) -> None:
+        """Run the GMB server
+
+        Spins up the ZEO database server and a background scheduler to update state
+        at the configured interval. Throws an exception if the server is already running.
+        """
+        if os.path.exists(CONFIG["pid_file"]):
+            with open(CONFIG["pid_file"], "r") as fi:
+                pid = int(fi.read().strip())
+            if psutil.pid_exists(pid):
+                raise Exception("Server already running!")
+        logging.info("Starting server...")
         config = load_config()
-        _mentions_only = (
-            mentions_only if mentions_only is not None else config["mentions_only"]
+        ZEO.server(path=CONFIG['db_location'], port=config['port'])
+        client = cls()
+        sched = BackgroundScheduler(daemon=True)
+        sched.add_job(
+            client.update,
+            "interval",
+            seconds=config["update_interval"],
+            next_run_time=datetime.datetime.now(),
         )
-        if _mentions_only:
+        sched.start()
+        with open(CONFIG["pid_file"], "w") as pidfile:
+            pidfile.write(str(os.getpid()))
+        logging.info("server running")
+        try:
+            while True:
+                time.sleep(2)
+        except (KeyboardInterrupt, SystemExit):
+            sched.shutdown()
+
+    def get_state(self, complete=False):
+        """Get a dictionary specifying the current database state
+
+        By default, excludes the following:
+         - muted PRs and associated notifications
+         - cleared notifications
+         - PRs and associated notifications to be excluded based on the `mentions_only`
+           and/or `team_mentions` flags
+        If `complete` is True, this will return all notifications/PRs.
+
+        Args:
+            complete: If True, return all data, ignoring the `mentions_only and
+                `team_mentions` flags
+        Returns:
+            A dictionary of the complete database state, with the following keys:
+            {
+                "notifications":
+                "pull_requests":
+                "codeowners":
+                "team_members":
+                "last_update":
+                "mentioned":
+                "team_mentioned":
+            }
+
+            """
+        mentions_only = False if complete else self.CONFIG["mentions_only"]
+
+        pull_requests = self.pull_requests
+        notifications = self.notifications
+        if mentions_only:
             pull_requests = {
                 pr_id: pr
-                for pr_id, pr in self.pull_requests.items()
+                for pr_id, pr in pull_requests.items()
                 if (pr_id in self.mentioned)
-                or (pr["author"] == config["user"])
-                or (config["team_mentions"] and pr_id in self.team_mentioned)
+                or (pr["author"] == self.CONFIG["user"])
+                or (self.CONFIG["team_mentions"] and pr_id in self.team_mentioned)
             }
             notifications = {
                 notif_id: notif
-                for notif_id, notif in self.notifications.items()
+                for notif_id, notif in notifications.items()
                 if notif.get("pr_id") in self.mentioned
-                or self.pull_requests.get(notif.get("pr_id"), {}).get("author")
-                == config["user"]
+                or pull_requests.get(notif.get("pr_id"), {}).get("author")
+                == self.CONFIG["user"]
             }
-        else:
-            pull_requests = self.pull_requests
-            notifications = self.notifications
+        if not complete:
+            pull_requests = {
+                pr_id: pr for pr_id, pr in pull_requests.items() if not pr["muted"]
+            }
+            notifications = {
+                notif_id: notif
+                for notif_id, notif in notifications.items()
+                if not pull_requests.get(notif.get("pr_id"), {}).get("muted")
+                and not notif["cleared"]
+            }
+
         return {
             "notifications": notifications,
             "pull_requests": pull_requests,
             "codeowners": self.codeowners,
             "team_members": self.team_members,
             "last_update": self.last_update,
-            "mentioned": list(self.mentioned),
-            "team_mentioned": list(self.team_mentioned),
+            "mentioned": self.mentioned,
+            "team_mentioned": self.team_mentioned,
         }
 
     def _dump_state(self):
-        """Dump current state to disk"""
-        with open(CONFIG["state_path"], "w") as fh:
-            fh.write(json.dumps(self.get_state(mentions_only=False)))
+        """Dump current state to db"""
+        with self.db.transaction() as conn:
+            for key, val in self.get_state(complete=True).items():
+                setattr(conn.root, key, val)
 
     def _transform_pr_url(self, api_url):
         """Transform a pull request API URL to a browser URL"""
@@ -73,16 +149,15 @@ class GitHubClient:
         )
 
     def _load_state(self):
-        """load state from disk"""
-        with open(CONFIG["state_path"], "r") as fh:
-            state = json.loads(fh.read())
-            self.notifications = state["notifications"]
-            self.pull_requests = state["pull_requests"]
-            self.codeowners = state["codeowners"]
+        """load state from db"""
+        with self.db.transaction() as conn:
+            self.notifications = conn.root.notifications
+            self.pull_requests = conn.root.pull_requests
+            self.codeowners = conn.root.codeowners
             self.team_members = {}
-            self.last_update = state["last_update"]
-            self.mentioned = set(state["mentioned"])
-            self.team_mentioned = set(state["team_mentioned"])
+            self.last_update = conn.root.last_update
+            self.mentioned = set(conn.root.mentioned)
+            self.team_mentioned = set(conn.root.team_mentioned)
 
     def rate_limit(self):
         """Get rate limit information from the github3 client"""
@@ -95,14 +170,23 @@ class GitHubClient:
     def mute_pr(self, id_) -> None:
         """Mute a PR"""
         self.pull_requests[id_]["muted"] = True
+        with self.db.transaction() as conn:
+            conn.root.pull_requests = self.pull_requests
 
     def unmute_pr(self, id_):
         """Unmute a PR"""
         self.pull_requests[id_]["muted"] = False
+        with self.db.transaction() as conn:
+            conn.root.pull_requests = self.pull_requests
 
     def clear_notification(self, notif_id):
         self.notifications[notif_id]["cleared"] = True
-        self.current_notifications[notif_id].mark()
+        with self.db.transaction() as conn:
+            conn.root.notifications = self.notifications
+
+    def open_notification(self, notif_id):
+        self.clear_notification(notif_id)
+        webbrowser.open(self.notifications[notif_id]["pr_url"])
 
     def get_pull_requests(self):
         """Search for all pull_requests involving the user"""
@@ -158,7 +242,6 @@ class GitHubClient:
         url_info = url.replace("https://api.github.com/repos/", "").split("/")
         pr = self._client.pull_request(url_info[0], url_info[1], int(url_info[3]))
         parsed = self.parse_pull_request(pr, get_test_status=False)
-        # parsed["closed"] = True
         self.pull_requests[pr.id] = parsed
         self.current_prs.add(pr.id)
         return parsed
@@ -205,6 +288,8 @@ class GitHubClient:
 
     def _should_notify(self, notif):
         id_ = notif["pr_id"]
+        if self.pull_requests[id_]["muted"]:
+            return False
         if self.CONFIG["mentions_only"] and self.CONFIG["team_mentions"]:
             return id_ in self.mentioned or id_ in self.team_mentioned
         if self.CONFIG["mentions_only"] and not self.CONFIG["team_mentions"]:
@@ -213,12 +298,12 @@ class GitHubClient:
 
     def _update_notifications(self, mentions_only=False):
         for notification in self._client.notifications():
-            self.current_notifications[notification.id] = notification
-            if notification.id not in self.notifications:
+            self.current_notifications[int(notification.id)] = notification
+            if int(notification.id) not in self.notifications:
                 parsed = self._parse_notification(
                     notification, {pr["url"]: pr for pr in self.pull_requests.values()}
                 )
-                self.notifications[notification.id] = parsed
+                self.notifications[int(notification.id)] = parsed
                 if self._should_notify(parsed):
                     self._notify(
                         title="New Notification",
@@ -226,7 +311,8 @@ class GitHubClient:
                         open=parsed["pr_url"],
                     )
             else:
-                # continue
+                if self.notifications[int(notification.id)]["cleared"]:
+                    notification.mark()
                 prs_by_url = {pr["url"]: pr for pr in self.pull_requests.values()}
                 associated_pr = prs_by_url.get(notification.subject["url"])
                 if associated_pr:
@@ -342,9 +428,11 @@ class GitHubClient:
             "repo": pull_request.repository.name,
             "org": pull_request.repository.owner.login,
             "title": pull_request.title,
-            "number": pull_request.number
+            "number": pull_request.number,
         }
-        parsed["test_status"] = {} if pull_request.merged else self._get_test_status(pull_request)
+        parsed["test_status"] = (
+            {} if pull_request.merged else self._get_test_status(pull_request)
+        )
         parsed["owners"] = self.get_pr_codeowners(pull_request, reviews)
 
         if previous and parsed["author"] == self.CONFIG["user"]:
@@ -353,7 +441,8 @@ class GitHubClient:
 
     def _state_change_notification(self, current_pr, previous_pr):
         if (current_pr["test_status"]["outcome"] != "pending") and (
-            previous_pr["test_status"]["outcome"] != current_pr["test_status"]["outcome"]
+            previous_pr["test_status"]["outcome"]
+            != current_pr["test_status"]["outcome"]
         ):
             self._notify(
                 title="Test status change",
@@ -363,7 +452,7 @@ class GitHubClient:
             )
         if (
             current_pr["mergeable_state"] == "dirty"
-            and not previous_pr["mergeable_state"] != "dirty"
+            and previous_pr["mergeable_state"] != "dirty"
         ):
             self._notify(
                 title="Merge conflict",
@@ -380,7 +469,9 @@ class GitHubClient:
         runs = {}
         conclusions = set()
         for check in commit.check_runs():
-            required = check.name in self.protection[pull_request.base.ref]["required_status_checks"].get("contexts", [])
+            required = check.name in self.protection[pull_request.base.ref][
+                "required_status_checks"
+            ].get("contexts", [])
             runs[check.name] = (check.conclusion, required)
             if required:
                 if check.status == "completed":
@@ -401,3 +492,25 @@ class GitHubClient:
             else:
                 suite_outcome = "success"
         return {"outcome": suite_outcome if protected else None, "runs": runs}
+
+
+def main():
+    if len(sys.argv) == 1:
+        GitHubClient.run_server()
+    if sys.argv[1] == "open":
+        client = GitHubClient()
+        client.open_notification(int(sys.argv[2]))
+    if sys.argv[1] == "clear":
+        client = GitHubClient()
+        client.clear_notification(int(sys.argv[2]))
+    if sys.argv[1] == "mute":
+        client = GitHubClient()
+        client.mute_pr(int(sys.argv[2]))
+    if sys.argv[1] == "unmute":
+        client = GitHubClient()
+        client.unmute_pr(int(sys.argv[2]))
+    if sys.argv[1] == "config":
+        update_config(sys.argv[2], sys.argv[3])
+    if sys.argv[1] == "refresh":
+        client = GitHubClient()
+        client.update()

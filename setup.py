@@ -14,11 +14,12 @@ setup(
         "tabulate",
         "psutil",
         "pync",
-        "flask",
-        "requests",
         "apscheduler",
-        "ruamel.yaml"
+        "ruamel.yaml",
+        "ZEO",
+        "ZODB"
+
     ],
-    entry_points={"console_scripts": ["gmb-server=github_menubar.server:main"]},
+    entry_points={"console_scripts": ["gmb=github_menubar.github_client:main"]},
     zip_safe=False,
 )

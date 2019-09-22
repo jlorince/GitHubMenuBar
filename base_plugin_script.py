@@ -1,25 +1,19 @@
 import os
-import subprocess
 import sys
+
+import psutil
 
 from github_menubar import BitBarRenderer
 from github_menubar.config import CONFIG, DEFAULT_CONFIG, GLYPHS
 from github_menubar.github_client import load_config
 
-import psutil
-
 
 def startProcess():
     print(
-        f"{GLYPHS['github_logo']} GMB Server loading...|{CONFIG['font_large']}"
+        f"{GLYPHS['github_logo']} GMB not running |{CONFIG['font_large']}"
     )
-    process = subprocess.Popen(
-        [f"{sys.executable.rsplit('/', 1)[0]}/gmb-server"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    with open(CONFIG["pid_file"], "w") as fi:
-        fi.write(str(process.pid))
+    print("---")
+    print(f"Click to start server |{CONFIG['font_large']} bash={sys.executable.rsplit('/', 1)[0]}/gmb param1=&")
 
 
 def setup():
@@ -55,4 +49,3 @@ def main(argv):
 
 if __name__ == "__main__":
     main(sys.argv)
-

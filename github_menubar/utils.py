@@ -44,7 +44,8 @@ def upgrade_config():
         return
     default_config = yaml.load(DEFAULT_CONFIG)
     for key, value in existing_config.items():
-        default_config[key] = value
+        if key in default_config:
+            default_config[key] = value
     yaml.dump(default_config, open(CONFIG["config_file_path"], 'w'))
 
 

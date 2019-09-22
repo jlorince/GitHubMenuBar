@@ -13,19 +13,19 @@ This code is a work-in-progress, but is entirely read-only. You may have some is
  - [Nerd fonts](https://github.com/ryanoasis/nerd-fonts) (handled by install script)
  - [teminal-notifier](https://github.com/julienXX/terminal-notifier) (Optional, handled by install script)
 
-## Updating
+## Existing users
 
 If you already have GMB configured and running, just pull down the repo, run the install script again, and you're all set!
 
 ## Getting started for the first time
 
-1. Make sure you have a GitHub [personal access token](https://github.com/settings/tokens) For full functionality, the token should have full repo, user, and notification permissions.
+1. Make sure you have a GitHub [personal access token](https://github.com/settings/tokens). For full functionality, the token should have full repo, user, and notification permissions.
 
 2. Clone this repo, and run the install script (`bash install.sh`) from the repo root. BitBar will automatically launch when installation completes.
 
-3. If you had BitBar installed prior to installation, the install script should have copied the auto-generated script to your BitBar plugins directory, so move on to step 4. If not, when the BitBar app launches it will prompt you to select your plugins directory. Do so, and copy `GitHubMenuBar.5s.py` from repo root to the plugins directory (this file will have been generated automatically by the install script).
+3. If you had BitBar installed prior to installation, the install script should have copied the auto-generated script to your BitBar plugins directory, so move on to step 4. If not, when the BitBar app launches it will prompt you to select your plugins directory. Do so, and copy `GitHubMenuBar.5s.py` from repo root to the plugins directory (this file will have been generated automatically by the install script). Subsequent updates will not require this step.
 
-4. At this point BitBar should be running and you'll see a GitHub icon in your MenuBar. Click it, and select the open to setup GMB. This will open a config file in your terminal.
+4. At this point BitBar should be running and you'll see a GitHub icon in your MenuBar. Click it, and select the option to setup GMB. This will open a config file in your terminal.
 
 5. Set your GitHub access token and username in the config file, and you're all set.
 
@@ -71,7 +71,11 @@ TODO - add basic architecture overview.
     - access and unmute muted PRs
     - view the PID of the GMB server process and the time of the last data refresh
     - force the server to refresh data from GitHub
-    - kill the gmb server (triggering an auto-restart)
+    - kill the gmb server
+
+### Configuration
+
+TODO - add detailed configuration description
 
 ## Debugging
 
@@ -83,7 +87,7 @@ TODO - add basic architecture overview.
 
   - support for other issue mention notificiations
   - Done: ~support for copying URLs from the dropdown~
-  - update data persistence to use SQLlite or similar
+  - Done: ~update data persistence to use SQLlite or similar~
   - Add terminal-only renderer, to allow usage without BitBar (though this sorta makes the name inaccurate...)
   - Support for team mention notifications.
   - More PR metadata (test details, etc.) available in sub-menus
