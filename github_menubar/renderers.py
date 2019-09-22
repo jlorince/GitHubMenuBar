@@ -1,10 +1,9 @@
-import json
 from datetime import datetime
+import sys
 
 from github_menubar.config import COLORS, CONFIG, GLYPHS, TREX
+from github_menubar.github_client import GitHubClient
 from github_menubar.utils import load_config
-
-import requests
 
 from tabulate import tabulate
 
@@ -52,20 +51,17 @@ class Renderer:
     def __init__(self):
         self.CONFIG = load_config()
         self.PID = open(CONFIG["pid_file"]).read().strip()
+        self._client = GitHubClient()
         self.state = self._get_state()
         self.muted_prs = self._get_muted_prs()
         self.error = False
 
     def _get_state(self):
-        response = requests.get(f"http://127.0.0.1:{self.CONFIG['port']}/state")
-        state = json.loads(response.content)
-        for id_ in list(state["pull_requests"]):
-            state["pull_requests"][int(id_)] = state["pull_requests"].pop(id_)
+        state = self._client.get_state()
         return state
 
     def _get_muted_prs(self):
-        response = requests.get(f"http://127.0.0.1:{self.CONFIG['port']}/muted")
-        return json.loads(response.content)
+        return self._client.get_muted_prs()
 
     def transform_pr_url(self, api_url):
         return api_url.replace("api.github.com/repos", "github.com").replace(
@@ -77,10 +73,7 @@ class Renderer:
         return [
             pull_request
             for pull_request in self.state["pull_requests"].values()
-            if (
-                pull_request["author"] == self.CONFIG["user"]
-                and not pull_request["muted"]
-            )
+            if pull_request["author"] == self.CONFIG["user"]
         ]
 
     @property
@@ -89,8 +82,7 @@ class Renderer:
             pull_request
             for pull_request in self.state["pull_requests"].values()
             if (
-                not pull_request["muted"]
-                and pull_request["author"] != self.CONFIG["user"]
+                pull_request["author"] != self.CONFIG["user"]
                 and pull_request["state"] not in ("CLOSED", "MERGED")
             )
         ]
@@ -113,7 +105,7 @@ class BitBarRenderer(Renderer):
         notif_ids = []
         for notif_id, notification in self.state["notifications"].items():
             pr = self._pr_urls.get(notification["url"])
-            if pr and not notification["cleared"]:
+            if pr:
                 desc = self._format(pr)
                 rows.append([desc, pr["author"], pr["state"]])
                 ids.append(pr["id"])
@@ -227,7 +219,7 @@ class BitBarRenderer(Renderer):
             [
                 notif
                 for notif in self.state["notifications"].values()
-                if not notif["cleared"] and notif["url"] in self._pr_urls
+                if notif["url"] in self._pr_urls
             ]
         )
         n_failing_tests = 0
@@ -281,6 +273,7 @@ class BitBarRenderer(Renderer):
         bash=None,
         param1=None,
         param2=None,
+        param3=None,
         open_terminal=False,
     ):
         font = font or self.CONFIG["font"]
@@ -296,10 +289,12 @@ class BitBarRenderer(Renderer):
                 result += " alternate=true"
             if bash:
                 result += f" bash={bash} terminal={str(open_terminal).lower()}"
-            if param1:
+            if param1 is not None:
                 result += f" param1={param1}"
-            if param2:
+            if param2 is not None:
                 result += f" param2={param2}"
+            if param3 is not None:
+                result += f" param3={param3}"
             print(result)
 
     def _section_break(self, indent=0):
@@ -330,10 +325,9 @@ class BitBarRenderer(Renderer):
             self._section_break(indent=1)
             self._printer(
                 f"Mute PR",
-                bash="/usr/bin/curl",
-                param1='"localhost:{}/mute_pr?pr={}"'.format(
-                    self.CONFIG["port"], pull_request["id"]
-                ),
+                bash=self._get_gmb(),
+                param1="mute",
+                param2=pull_request["id"],
                 refresh=True,
                 indent=1,
             )
@@ -361,8 +355,7 @@ class BitBarRenderer(Renderer):
                     "runs"
                 ].items():
                     self._printer(
-                        f"{'*' if required else ''}{check}: {outcome}",
-                        indent=1,
+                        f"{'*' if required else ''}{check}: {outcome}", indent=1
                     )
 
             self._printer(
@@ -372,6 +365,9 @@ class BitBarRenderer(Renderer):
                 param1="-c",
                 param2="'printf {} | pbcopy'".format(pull_request["browser_url"]),
             )
+
+    def _get_gmb(self):
+        return f"{sys.executable.rsplit('/', 1)[0]}/gmb"
 
     def print_state(self):
         if self.error:
@@ -418,9 +414,9 @@ class BitBarRenderer(Renderer):
                         url = self.state["pull_requests"][pr_id]["browser_url"]
                         self._printer(
                             row,
-                            href='"http://localhost:{}/clear_notification?notif={}&redirect={}"'.format(
-                                self.CONFIG["port"], notif_id, url
-                            ),
+                            bash=self._get_gmb(),
+                            param1="open",
+                            param2=notif_id,
                             refresh=True,
                         )
                         self._printer(
@@ -429,21 +425,24 @@ class BitBarRenderer(Renderer):
                         self._section_break(indent=1)
                         self._printer(
                             f"Dismiss",
-                            bash="/usr/bin/curl",
-                            param1='"http://localhost:{}/clear_notification?notif={}"'.format(
-                                self.CONFIG["port"], notif_id
-                            ),
+                            bash=self._get_gmb(),
+                            param1="clear",
+                            param2=notif_id,
                             refresh=True,
                             indent=1,
                         )
                         self._section_break(indent=1)
-                        comment = self.state["notifications"][notif_id].get("comment", {})
-                        if comment.get('body_text'):
+                        comment = self.state["notifications"][notif_id].get(
+                            "comment", {}
+                        )
+                        if comment.get("body_text"):
                             self._printer(
                                 f"Latest comment ({comment['user']['login']}):",
                                 indent=1,
                             )
-                            self._printer(comment['body_text'].replace('\n', ''), indent=1)
+                            self._printer(
+                                comment["body_text"].replace("\n", ""), indent=1
+                            )
                         self._printer(
                             f"{row.rsplit(maxsplit=3)[0]}",
                             alternate=True,
@@ -463,23 +462,38 @@ class BitBarRenderer(Renderer):
             self._printer(
                 f"{'Disable' if self.CONFIG['mentions_only'] else 'Enable'} mentions only mode",
                 indent=1,
-                bash="/usr/bin/curl",
-                param1=f"localhost:{self.CONFIG['port']}/update_config?key=mentions_only&value={not self.CONFIG['mentions_only']}",
+                bash=self._get_gmb(),
+                param1="config",
+                param2="mentions_only",
+                param3=not self.CONFIG["mentions_only"],
                 refresh=True,
             )
             if self.CONFIG["mentions_only"]:
                 self._printer(
                     f"{'Disable' if self.CONFIG['team_mentions'] else 'Enable'} team mentions",
                     indent=1,
-                    bash="/usr/bin/curl",
-                    param1=f"localhost:{self.CONFIG['port']}/update_config?key=team_mentions&value={not self.CONFIG['team_mentions']}",
+                    bash=self._get_gmb(),
+                    param1="config",
+                    param2="team_mentions",
+                    param3=not self.CONFIG["team_mentions"],
                     refresh=True,
                 )
             self._printer(
                 f"{'Expand' if self.CONFIG['collapsed'] else 'Collapse'} MenuBar icons",
                 indent=1,
-                bash="/usr/bin/curl",
-                param1=f"localhost:{self.CONFIG['port']}/update_config?key=collapsed&value={not self.CONFIG['collapsed']}",
+                bash=self._get_gmb(),
+                param1="config",
+                param2="collapsed",
+                param3=not self.CONFIG["collapsed"],
+                refresh=True,
+            )
+            self._printer(
+                f"{'Disable' if self.CONFIG['desktop_notifications'] else 'Enable'} desktop notifications",
+                indent=1,
+                bash=self._get_gmb(),
+                param1="config",
+                param2="desktop_notifications",
+                param3=not self.CONFIG["desktop_notifications"],
                 refresh=True,
             )
             self._section_break(indent=1)
@@ -500,21 +514,17 @@ class BitBarRenderer(Renderer):
                     self._printer(
                         pr["description"],
                         indent=2,
-                        bash="/usr/bin/curl",
-                        param1='"localhost:{}/unmute_pr?pr={}"'.format(
-                            self.CONFIG["port"], pr["id"]
-                        ),
+                        bash=self._get_gmb(),
+                        param1="unmute",
+                        param2=pr["id"],
                         refresh=True,
                     )
 
             self._printer(
-                "Force refresh",
-                indent=1,
-                bash="/usr/bin/curl",
-                param1=f"localhost:{self.CONFIG['port']}/refresh",
+                "Force refresh", indent=1, bash=self._get_gmb(), param1="refresh"
             )
             self._printer(
-                "Bounce server",
+                "Kill server",
                 indent=1,
                 bash="kill",
                 param1=self.PID,

@@ -6,7 +6,8 @@ CONFIG = {
     "pid_file": "/tmp/github_menubar.pid",
     "config_file_path": f"{os.path.expanduser('~')}/.github_menubar.config.yaml",
     "log_file": "/tmp/github_menubar.log",
-    "state_path": f"{os.path.expanduser('~')}/.github_menubar.state.json"
+    "state_path": f"{os.path.expanduser('~')}/.github_menubar.state.json",
+    "db_location": f"{os.path.expanduser('~')}/.github_menubar/db",
 }
 
 # https://www.reddit.com/r/asciiart/comments/ai0787/fuck_yeah_im_a_trex/
