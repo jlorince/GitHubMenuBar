@@ -213,6 +213,10 @@ class GitHubClient:
             for issue in self._client.search_issues(
                 f"is:open is:pr team:{team} archived:false"
             ):
+                if issue.id not in issue_pr_map:
+                    pr = issue.issue.pull_request()
+                    prs.append(pr)
+                    issue_pr_map[issue.id] = pr.id
                 self.team_mentioned.add(issue_pr_map[issue.id])
 
         return prs
@@ -431,7 +435,7 @@ class GitHubClient:
             "number": pull_request.number,
         }
         parsed["test_status"] = (
-            {} if pull_request.merged else self._get_test_status(pull_request)
+            {} if pull_request.merged or not get_test_status else self._get_test_status(pull_request)
         )
         parsed["owners"] = self.get_pr_codeowners(pull_request, reviews)
 
