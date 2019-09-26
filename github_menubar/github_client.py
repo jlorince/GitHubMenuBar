@@ -14,6 +14,7 @@ import pync
 import ZEO
 from ZEO.ClientStorage import ClientStorage
 from ZODB import DB
+
 # from ZODB.PersistentMapping import PersistentMapping
 
 from github_menubar.config import CONFIG
@@ -28,16 +29,6 @@ class GitHubClient:
         self.db = DB(self.storage)
         self._client = github3.login(token=self.CONFIG["token"])
         self._init_db()
-        try:
-            self._load_state()
-        except Exception:
-            self.notifications = {}
-            self.pull_requests = {}
-            self.codeowners = {}
-            self.team_members = {}
-            self.mentioned = set()
-            self.team_mentioned = set()
-            self.last_update = None
 
     def _init_db(self):
         with self.db.transaction() as conn:
@@ -66,7 +57,7 @@ class GitHubClient:
                 raise Exception("Server already running!")
         logging.info("Starting server...")
         config = load_config()
-        ZEO.server(path=CONFIG['db_location'], port=config['port'])
+        ZEO.server(path=CONFIG["db_location"], port=config["port"])
         client = cls()
         sched = BackgroundScheduler(daemon=True)
         sched.add_job(
@@ -112,49 +103,44 @@ class GitHubClient:
 
         """
         mentions_only = False if complete else self.CONFIG["mentions_only"]
-        pull_requests = self.pull_requests
-        notifications = self.notifications
-        if mentions_only:
-            pull_requests = {
-                pr_id: pr
-                for pr_id, pr in pull_requests.items()
-                if (pr_id in self.mentioned)
-                or (pr["author"] == self.CONFIG["user"])
-                or (self.CONFIG["team_mentions"] and pr_id in self.team_mentioned)
-            }
-            notifications = {
-                notif_id: notif
-                for notif_id, notif in notifications.items()
-                if notif.get("pr_id") in self.mentioned
-                or pull_requests.get(notif.get("pr_id"), {}).get("author")
-                == self.CONFIG["user"]
-            }
-        if not complete:
-            pull_requests = {
-                pr_id: pr for pr_id, pr in pull_requests.items() if not pr["muted"]
-            }
-            notifications = {
-                notif_id: notif
-                for notif_id, notif in notifications.items()
-                if not pull_requests.get(notif.get("pr_id"), {}).get("muted")
-                and not notif["cleared"]
-            }
-
-        return {
-            "notifications": notifications,
-            "pull_requests": pull_requests,
-            "codeowners": self.codeowners,
-            "team_members": self.team_members,
-            "last_update": self.last_update,
-            "mentioned": self.mentioned,
-            "team_mentioned": self.team_mentioned,
-        }
-
-    def _dump_state(self):
-        """Dump current state to db"""
         with self.db.transaction() as conn:
-            for key, val in self.get_state(complete=True).items():
-                setattr(conn.root, key, val)
+            pull_requests = conn.root.pull_requests
+            notifications = conn.root.notifications
+            if mentions_only:
+                pull_requests = {
+                    pr_id: pr
+                    for pr_id, pr in pull_requests.items()
+                    if (pr_id in conn.root.mentioned)
+                    or (pr["author"] == self.CONFIG["user"])
+                    or (self.CONFIG["team_mentions"] and pr_id in conn.root.team_mentioned)
+                }
+                notifications = {
+                    notif_id: notif
+                    for notif_id, notif in notifications.items()
+                    if notif.get("pr_id") in conn.root.mentioned
+                    or pull_requests.get(notif.get("pr_id"), {}).get("author")
+                    == self.CONFIG["user"]
+                }
+            if not complete:
+                pull_requests = {
+                    pr_id: pr for pr_id, pr in pull_requests.items() if not pr["muted"]
+                }
+                notifications = {
+                    notif_id: notif
+                    for notif_id, notif in notifications.items()
+                    if not pull_requests.get(notif.get("pr_id"), {}).get("muted")
+                    and not notif["cleared"]
+                }
+
+            return {
+                "notifications": notifications,
+                "pull_requests": pull_requests,
+                "codeowners": conn.root.codeowners,
+                "team_members": conn.root.team_members,
+                "last_update": conn.root.last_update,
+                "mentioned": conn.root.mentioned,
+                "team_mentioned": conn.root.team_mentioned,
+            }
 
     def _transform_pr_url(self, api_url):
         """Transform a pull request API URL to a browser URL"""
@@ -162,41 +148,34 @@ class GitHubClient:
             "/pulls/", "/pull/"
         )
 
-    def _load_state(self):
-        """load state from db"""
-        with self.db.transaction() as conn:
-            self.notifications = conn.root.notifications
-            self.pull_requests = conn.root.pull_requests
-            self.codeowners = conn.root.codeowners
-            self.team_members = {}
-            self.last_update = conn.root.last_update
-            self.mentioned = set(conn.root.mentioned)
-            self.team_mentioned = set(conn.root.team_mentioned)
-
     def rate_limit(self):
         """Get rate limit information from the github3 client"""
         return self._client.rate_limit()
 
     def get_muted_prs(self) -> dict:
         """Retrieve information on all PRs the user has muted"""
-        return [pr for pr in self.pull_requests.values() if pr["muted"]]
+        with self.db.transaction() as conn:
+            return [pr for pr in conn.root.pull_requests.values() if pr["muted"]]
 
     def mute_pr(self, id_) -> None:
         """Mute a PR"""
-        self.pull_requests[id_]["muted"] = True
         with self.db.transaction() as conn:
-            conn.root.pull_requests = self.pull_requests
+            pull_requests = conn.root.pull_requests
+            pull_requests[id_]["muted"] = True
+            conn.root.pull_requests = pull_requests
 
     def unmute_pr(self, id_):
         """Unmute a PR"""
-        self.pull_requests[id_]["muted"] = False
         with self.db.transaction() as conn:
-            conn.root.pull_requests = self.pull_requests
+            pull_requests = conn.root.pull_requests
+            pull_requests[id_]["muted"] = False
+            conn.root.pull_requests = pull_requests
 
     def clear_notification(self, notif_id):
-        self.notifications[notif_id]["cleared"] = True
         with self.db.transaction() as conn:
-            conn.root.notifications = self.notifications
+            notifications = conn.root.notifications
+            notifications[notif_id]["cleared"] = True
+            conn.root.notifications = notifications
         for notif in self._client.notifications():
             if int(notif.id) == notif_id:
                 notif.mark()
@@ -204,16 +183,18 @@ class GitHubClient:
 
     def open_notification(self, notif_id):
         self.clear_notification(notif_id)
-        webbrowser.open(self.notifications[notif_id]["pr_url"])
+        with self.db.transaction() as conn:
+            webbrowser.open(conn.root.notifications[notif_id]["pr_url"])
 
     def get_pull_requests(self):
         """Search for all pull_requests involving the user"""
-        user_teams = [
-            team
-            for repo, teams in self.team_members.items()
-            for team, members in teams.items()
-            if self.CONFIG["user"] in members
-        ]
+        with self.db.transaction() as conn:
+            user_teams = [
+                team
+                for repo, teams in conn.root.team_members.items()
+                for team, members in teams.items()
+                if self.CONFIG["user"] in members
+            ]
         prs = []
         issue_pr_map = {}
         for issue in self._client.search_issues(
@@ -226,7 +207,10 @@ class GitHubClient:
         for issue in self._client.search_issues(
             f"is:open is:pr mentions:{self.CONFIG['user']} archived:false"
         ):
-            self.mentioned.add(issue_pr_map[issue.id])
+            with self.db.transaction() as conn:
+                mentioned = conn.root.mentioned
+                mentioned.add(issue_pr_map[issue.id])
+                conn.root.mentioned = mentioned
         for team in user_teams:
             for issue in self._client.search_issues(
                 f"is:open is:pr team:{team} archived:false"
@@ -235,7 +219,10 @@ class GitHubClient:
                     pr = issue.issue.pull_request()
                     prs.append(pr)
                     issue_pr_map[issue.id] = pr.id
-                self.team_mentioned.add(issue_pr_map[issue.id])
+                with self.db.transaction() as conn:
+                    team_mentioned = conn.root.team_mentioned
+                    team_mentioned.add(issue_pr_map[issue.id])
+                    conn.root.team_mentioned = team_mentioned
 
         return prs
 
@@ -264,7 +251,10 @@ class GitHubClient:
         url_info = url.replace("https://api.github.com/repos/", "").split("/")
         pr = self._client.pull_request(url_info[0], url_info[1], int(url_info[3]))
         parsed = self.parse_pull_request(pr, get_test_status=False)
-        self.pull_requests[pr.id] = parsed
+        with self.db.transaction() as conn:
+            pull_requests = conn.root.pull_requests
+            pull_requests[pr.id] = parsed
+            conn.root.pull_requests = pull_requests
         self.current_prs.add(pr.id)
         return parsed
 
@@ -285,21 +275,27 @@ class GitHubClient:
                 self.protection[pull_request.base.ref] = self._get_protection(
                     pull_request
                 )
-            if repo_key not in self.codeowners:
-                try:
-                    codeowner_file = pull_request.repository.file_contents("CODEOWNERS")
-                    codeowner_file_contents = codeowner_file.decoded.decode()
-                    self.codeowners[repo_key] = self.parse_codeowners_file(
-                        codeowner_file_contents
-                    )
-                except (NotFoundError, ForbiddenError):
-                    self.codeowners[repo_key] = None
-            if repo.owner.login not in self.team_members:
-                try:
-                    org = self._client.organization(repo.owner.login)
-                    self.team_members[repo.owner.login] = self.parse_teamembers(org)
-                except (NotFoundError, ForbiddenError):
-                    self.team_members[repo.owner.login] = None
+            with self.db.transaction() as conn:
+                codeowners = conn.root.codeowners
+                if repo_key not in codeowners:
+                    try:
+                        codeowner_file = pull_request.repository.file_contents("CODEOWNERS")
+                        codeowner_file_contents = codeowner_file.decoded.decode()
+                        codeowners[repo_key] = self.parse_codeowners_file(
+                            codeowner_file_contents
+                        )
+                    except (NotFoundError, ForbiddenError):
+                        codeowners[repo_key] = None
+                    conn.root.codeowners = codeowners
+            with self.db.transaction() as conn:
+                team_members = conn.root.team_members
+                if repo.owner.login not in team_members:
+                    try:
+                        org = self._client.organization(repo.owner.login)
+                        team_members[repo.owner.login] = self.parse_teamembers(org)
+                    except (NotFoundError, ForbiddenError):
+                        team_members[repo.owner.login] = None
+                conn.root.team_members = team_members
 
             parsed = self.parse_pull_request(pull_request)
             with self.db.transaction() as conn:
@@ -308,22 +304,28 @@ class GitHubClient:
 
     def _should_notify(self, notif):
         id_ = notif["pr_id"]
-        if self.pull_requests[id_]["muted"]:
-            return False
+        with self.db.transaction() as conn:
+            if conn.root.pull_requests[id_]["muted"]:
+                return False
         if self.CONFIG["mentions_only"] and self.CONFIG["team_mentions"]:
-            return id_ in self.mentioned or id_ in self.team_mentioned
+            with self.db.transaction() as conn:
+                return id_ in conn.root.mentioned or id_ in conn.root.team_mentioned
         if self.CONFIG["mentions_only"] and not self.CONFIG["team_mentions"]:
-            return id_ in self.mentioned
+            with self.db.transaction() as conn:
+                return id_ in conn.root.mentioned
         return True
 
     def _update_notifications(self, mentions_only=False):
+        with self.db.transaction() as conn:
+            prs_by_url = {pr["url"]: pr for pr in conn.root.pull_requests.values()}
         for notification in self._client.notifications():
             self.current_notifications[int(notification.id)] = notification
-            if int(notification.id) not in self.notifications:
-                parsed = self._parse_notification(
-                    notification, {pr["url"]: pr for pr in self.pull_requests.values()}
-                )
-                self.notifications[int(notification.id)] = parsed
+            with self.db.transaction() as conn:
+                new = int(notification.id) not in conn.root.notifications
+            if new:
+                parsed = self._parse_notification(notification, prs_by_url)
+                with self.db.transaction() as conn:
+                    conn.root.notifications[int(notification.id)] = parsed
                 if self._should_notify(parsed):
                     self._notify(
                         title="New Notification",
@@ -331,9 +333,9 @@ class GitHubClient:
                         open=parsed["pr_url"],
                     )
             else:
-                if self.notifications[int(notification.id)]["cleared"]:
-                    notification.mark()
-                prs_by_url = {pr["url"]: pr for pr in self.pull_requests.values()}
+                # if self.notifications[int(notification.id)]["cleared"]:
+                #     notification.mark()
+                # prs_by_url = {pr["url"]: pr for pr in self.pull_requests.values()}
                 associated_pr = prs_by_url.get(notification.subject["url"])
                 if associated_pr:
                     self.current_prs.add(associated_pr["id"])
@@ -341,23 +343,23 @@ class GitHubClient:
     def update(self):
         self.current_notifications = {}
         self.current_prs = set()
-        self.codeowners = {}
         self._update_pull_requests()
         self._update_notifications(mentions_only=load_config()["mentions_only"])
         # clear any old notifications
-        self.notifications = {
-            id_: notif
-            for id_, notif in self.notifications.items()
-            if id_ in self.current_notifications
-        }
-        # clear any old pull requests
-        self.pull_requests = {
-            pr["id"]: pr
-            for pr in self.pull_requests.values()
-            if pr["id"] in self.current_prs
-        }
-        self.last_update = time.time()
-        self._dump_state()
+        with self.db.transaction() as conn:
+            conn.root.notifications = {
+                id_: notif
+                for id_, notif in conn.root.notifications.items()
+                if id_ in self.current_notifications
+            }
+            # clear any old pull requests
+            conn.root.pull_requests = {
+                pr["id"]: pr
+                for pr in conn.root.pull_requests.values()
+                if pr["id"] in self.current_prs
+            }
+        with self.db.transaction() as conn:
+            conn.root.last_update = time.time()
 
     def parse_codeowners_file(self, file_contents):
         codeowners = []
@@ -381,9 +383,10 @@ class GitHubClient:
     def get_pr_codeowners(self, pr, reviews):
         all_owners = {}
         for file in pr.files():
-            codeowner_info = self.codeowners.get(
-                f"{pr.repository.owner.login}|{pr.repository.name}"
-            )
+            with self.db.transaction() as conn:
+                codeowner_info = conn.root.codeowners.get(
+                    f"{pr.repository.owner.login}|{pr.repository.name}"
+                )
             if codeowner_info:
                 for path, owners in codeowner_info:
                     if path in f"/{file.filename}":
@@ -392,16 +395,17 @@ class GitHubClient:
                             if reviews:
                                 for owner in owners:
                                     if "/" in owner:
-                                        if any(
-                                            user
-                                            in self.team_members.get(
-                                                pr.repository.owner.login, {}
-                                            ).get(owner, ())
-                                            and review["state"] == "APPROVED"
-                                            for user, review in reviews.items()
-                                        ):
-                                            approved = True
-                                            break
+                                        with self.db.transaction() as conn:
+                                            if any(
+                                                user
+                                                in conn.root.team_members.get(
+                                                    pr.repository.owner.login, {}
+                                                ).get(owner, ())
+                                                and review["state"] == "APPROVED"
+                                                for user, review in reviews.items()
+                                            ):
+                                                approved = True
+                                                break
                                     else:
                                         if any(
                                             user == owner
@@ -452,7 +456,9 @@ class GitHubClient:
             "number": pull_request.number,
         }
         parsed["test_status"] = (
-            {} if pull_request.merged or not get_test_status else self._get_test_status(pull_request)
+            {}
+            if pull_request.merged or not get_test_status
+            else self._get_test_status(pull_request)
         )
         parsed["owners"] = self.get_pr_codeowners(pull_request, reviews)
 

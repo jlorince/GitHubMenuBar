@@ -74,6 +74,7 @@ class Renderer:
             pull_request
             for pull_request in self.state["pull_requests"].values()
             if pull_request["author"] == self.CONFIG["user"]
+            and pull_request["state"] not in ("CLOSED", "MERGED")
         ]
 
     @property
