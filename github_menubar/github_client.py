@@ -14,6 +14,7 @@ import pync
 import ZEO
 from ZEO.ClientStorage import ClientStorage
 from ZODB import DB
+# from ZODB.PersistentMapping import PersistentMapping
 
 from github_menubar.config import CONFIG
 from github_menubar.utils import load_config, update_config
@@ -26,6 +27,7 @@ class GitHubClient:
         self.storage = ClientStorage(self.CONFIG["port"])
         self.db = DB(self.storage)
         self._client = github3.login(token=self.CONFIG["token"])
+        self._init_db()
         try:
             self._load_state()
         except Exception:
@@ -36,6 +38,19 @@ class GitHubClient:
             self.mentioned = set()
             self.team_mentioned = set()
             self.last_update = None
+
+    def _init_db(self):
+        with self.db.transaction() as conn:
+            try:
+                conn.root.pull_requests
+            except AttributeError:
+                conn.root.pull_requests = {}  # PersistentMapping()
+                conn.root.notifications = {}  # PersistentMapping()
+                conn.root.codeowners = {}  # PersistentMapping()
+                conn.root.team_members = {}  # PersistentMapping()
+                conn.root.mentioned = set()
+                conn.root.team_mentioned = set()
+                conn.root.last_update = None
 
     @classmethod
     def run_server(cls) -> None:
@@ -95,9 +110,8 @@ class GitHubClient:
                 "team_mentioned":
             }
 
-            """
+        """
         mentions_only = False if complete else self.CONFIG["mentions_only"]
-
         pull_requests = self.pull_requests
         notifications = self.notifications
         if mentions_only:
@@ -183,6 +197,10 @@ class GitHubClient:
         self.notifications[notif_id]["cleared"] = True
         with self.db.transaction() as conn:
             conn.root.notifications = self.notifications
+        for notif in self._client.notifications():
+            if int(notif.id) == notif_id:
+                notif.mark()
+                break
 
     def open_notification(self, notif_id):
         self.clear_notification(notif_id)
@@ -259,7 +277,6 @@ class GitHubClient:
         return full_repo.branch(pull_request.base.ref).original_protection
 
     def _update_pull_requests(self):
-        pull_requests = []
         self.protection = {}
         for pull_request in self.get_pull_requests():
             repo = pull_request.repository
@@ -284,11 +301,10 @@ class GitHubClient:
                 except (NotFoundError, ForbiddenError):
                     self.team_members[repo.owner.login] = None
 
-            pull_requests.append(pull_request)
-
-        for pr in pull_requests:
-            self.pull_requests[pr.id] = self.parse_pull_request(pr)
-            self.current_prs.add(pr.id)
+            parsed = self.parse_pull_request(pull_request)
+            with self.db.transaction() as conn:
+                conn.root.pull_requests[pull_request.id] = parsed
+            self.current_prs.add(pull_request.id)
 
     def _should_notify(self, notif):
         id_ = notif["pr_id"]
@@ -340,8 +356,8 @@ class GitHubClient:
             for pr in self.pull_requests.values()
             if pr["id"] in self.current_prs
         }
-        self._dump_state()
         self.last_update = time.time()
+        self._dump_state()
 
     def parse_codeowners_file(self, file_contents):
         codeowners = []
@@ -413,7 +429,8 @@ class GitHubClient:
 
     def parse_pull_request(self, pull_request, get_test_status=True):
         reviews = self.parse_reviews(pull_request)
-        previous = self.pull_requests.get(pull_request.id, {})
+        with self.db.transaction() as conn:
+            previous = conn.root.pull_requests.get(pull_request.id, {})
         parsed = {
             "base": pull_request.base.ref,
             "head": pull_request.head.ref,
