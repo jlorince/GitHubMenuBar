@@ -176,10 +176,13 @@ class GitHubClient:
             notifications = conn.root.notifications
             notifications[notif_id]["cleared"] = True
             conn.root.notifications = notifications
-        for notif in self._client.notifications():
-            if int(notif.id) == notif_id:
-                notif.mark()
-                break
+
+    def clear_all_notifications(self):
+        with self.db.transaction() as conn:
+            notifications = conn.root.notifications
+            for notif_id, notif in notifications.items():
+                notifications[notif_id]["cleared"] = True
+            conn.root.notifications = notifications
 
     def open_notification(self, notif_id):
         self.clear_notification(notif_id)
@@ -319,13 +322,14 @@ class GitHubClient:
         with self.db.transaction() as conn:
             prs_by_url = {pr["url"]: pr for pr in conn.root.pull_requests.values()}
         for notification in self._client.notifications():
+            notif_id = int(notification.id)
             self.current_notifications[int(notification.id)] = notification
             with self.db.transaction() as conn:
-                new = int(notification.id) not in conn.root.notifications
+                new = notif_id not in conn.root.notifications
             if new:
                 parsed = self._parse_notification(notification, prs_by_url)
                 with self.db.transaction() as conn:
-                    conn.root.notifications[int(notification.id)] = parsed
+                    conn.root.notifications[notif_id] = parsed
                 if self._should_notify(parsed):
                     self._notify(
                         title="New Notification",
@@ -333,9 +337,9 @@ class GitHubClient:
                         open=parsed["pr_url"],
                     )
             else:
-                # if self.notifications[int(notification.id)]["cleared"]:
-                #     notification.mark()
-                # prs_by_url = {pr["url"]: pr for pr in self.pull_requests.values()}
+                with self.db.transaction() as conn:
+                    if conn.root.notifications[notif_id]["cleared"]:
+                        notification.mark()
                 associated_pr = prs_by_url.get(notification.subject["url"])
                 if associated_pr:
                     self.current_prs.add(associated_pr["id"])
@@ -452,6 +456,7 @@ class GitHubClient:
             "last_modified": pull_request.last_modified,
             "repo": pull_request.repository.name,
             "org": pull_request.repository.owner.login,
+            "protected": self.protection[pull_request.base.ref]["enabled"],
             "title": pull_request.title,
             "number": pull_request.number,
         }
@@ -530,6 +535,8 @@ def main():
     if sys.argv[1] == "clear":
         client = GitHubClient()
         client.clear_notification(int(sys.argv[2]))
+    if sys.argv[1] == "clearall":
+        GitHubClient().clear_all_notifications()
     if sys.argv[1] == "mute":
         client = GitHubClient()
         client.mute_pr(int(sys.argv[2]))

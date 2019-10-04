@@ -27,7 +27,7 @@ GLYPHS = {
     "in_progress": "\uf10c",  # 
     "success": "\uf058",  # 
     "error": "\uf06a",  # 
-    "na": "-",  # "\uf6d7",  # 
+    "na": "\uf876",  #  
     "comment": "\uf679",  # 
     "approval": "\uf67e",  # 
     "cancelled": "\ufc38",  # ﰸ

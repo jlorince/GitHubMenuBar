@@ -1,12 +1,11 @@
-from datetime import datetime
 import sys
+from datetime import datetime
+
+from tabulate import tabulate
 
 from github_menubar.config import COLORS, CONFIG, GLYPHS, TREX
 from github_menubar.github_client import GitHubClient
 from github_menubar.utils import load_config
-
-from tabulate import tabulate
-
 
 REVIEW_STATE_MAP = {
     "COMMENTED": "comment",
@@ -139,16 +138,19 @@ class BitBarRenderer(Renderer):
             merge_conflict = (
                 GLYPHS["success"] if pull_request["mergeable"] else GLYPHS["error"]
             )
-            approved = GLYPHS["in_progress"]
-            if pull_request["owners"]:
-                if all(pull_request["owners"].values()):
-                    approved = GLYPHS["success"]
+            if pull_request["protected"]:
+                approved = GLYPHS["in_progress"]
+                if pull_request["owners"]:
+                    if all(pull_request["owners"].values()):
+                        approved = GLYPHS["success"]
+                else:
+                    if any(
+                        review["state"] == "APPROVED"
+                        for review in pull_request["reviews"].values()
+                    ):
+                        approved = GLYPHS["success"]
             else:
-                if any(
-                    review["state"] == "APPROVED"
-                    for review in pull_request["reviews"].values()
-                ):
-                    approved = GLYPHS["success"]
+                approved = GLYPHS["na"]
 
             test_status = (
                 GLYPHS["na"]
@@ -407,6 +409,13 @@ class BitBarRenderer(Renderer):
                 notif_pr_table, pr_ids, notif_ids = self._build_notification_pr_table()
                 if len(notif_pr_table) > 1:
                     self._printer("NOTIFICATIONS")
+                    self._printer(
+                        f"Dismiss all notifications",
+                        bash=self._get_gmb(),
+                        param1="clearall",
+                        refresh=True,
+                        indent=1,
+                    )
                     self._printer(notif_pr_table[0])
                     self._printer("Click to copy URL", alternate=True)
                     for row, pr_id, notif_id in zip(
@@ -445,7 +454,7 @@ class BitBarRenderer(Renderer):
                                 comment["body_text"].replace("\n", ""), indent=1
                             )
                         self._printer(
-                            f"{row.rsplit(maxsplit=3)[0]}",
+                            f"{row.rsplit(maxsplit=2)[0]}",
                             alternate=True,
                             bash="/bin/bash",
                             param1="-c",
@@ -520,7 +529,19 @@ class BitBarRenderer(Renderer):
                         param2=pr["id"],
                         refresh=True,
                     )
-
+            self._printer("Icon key", indent=1)
+            self._printer("PR attributes", indent=2)
+            self._printer(f"{GLYPHS['merged_pr']}: Merge conflict status", indent=2)
+            self._printer(f"{GLYPHS['tests']}: Test status", indent=2)
+            self._printer(f"{GLYPHS['approval']}: Review status", indent=2)
+            self._section_break(indent=2)
+            self._printer("Status icons", indent=2)
+            self._printer(
+                f"{GLYPHS['success']}: OK  {GLYPHS['error']}: ERROR", indent=2
+            )
+            self._printer(
+                f"{GLYPHS['na']}: NA  {GLYPHS['in_progress']}: PENDING", indent=2
+            )
             self._printer(
                 "Force refresh", indent=1, bash=self._get_gmb(), param1="refresh"
             )
