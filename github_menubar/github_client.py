@@ -364,6 +364,7 @@ class GitHubClient:
             }
         with self.db.transaction() as conn:
             conn.root.last_update = time.time()
+        self.db.pack()
 
     def parse_codeowners_file(self, file_contents):
         codeowners = []
@@ -456,7 +457,7 @@ class GitHubClient:
             "last_modified": pull_request.last_modified,
             "repo": pull_request.repository.name,
             "org": pull_request.repository.owner.login,
-            "protected": self.protection[pull_request.base.ref]["enabled"],
+            "protected": self.protection.get(pull_request.base.ref, {}).get("enabled", False),
             "title": pull_request.title,
             "number": pull_request.number,
         }
