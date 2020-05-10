@@ -324,6 +324,7 @@ class BitBarRenderer(Renderer):
             self._printer(f"Repository: {pull_request['repo']}", indent=1)
             self._printer(f"Title: {pull_request['title']}", indent=1)
             self._printer(f"Number: {pull_request['number']}", indent=1)
+            self._printer(f"Base: {pull_request['base']}", indent=1)
             self._printer(f"Last modified: {pull_request['last_modified']}", indent=1)
             self._section_break(indent=1)
             self._printer(

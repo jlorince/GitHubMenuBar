@@ -112,7 +112,10 @@ class GitHubClient:
                     for pr_id, pr in pull_requests.items()
                     if (pr_id in conn.root.mentioned)
                     or (pr["author"] == self.CONFIG["user"])
-                    or (self.CONFIG["team_mentions"] and pr_id in conn.root.team_mentioned)
+                    or (
+                        self.CONFIG["team_mentions"]
+                        and pr_id in conn.root.team_mentioned
+                    )
                 }
                 notifications = {
                     notif_id: notif
@@ -242,11 +245,6 @@ class GitHubClient:
                 self._client._get(comment_url).content.decode()
             )
         notif["cleared"] = False
-        corresponding_pr = prs_by_url.get(notification.subject["url"])
-        if corresponding_pr is None and notif["type"] == "PullRequest":
-            corresponding_pr = self._parse_pr_from_notification(notification)
-        notif["pr_id"] = corresponding_pr["id"] if corresponding_pr else None
-        notif["pr_url"] = corresponding_pr["browser_url"] if corresponding_pr else None
         return notif
 
     def _parse_pr_from_notification(self, notification):
@@ -282,7 +280,9 @@ class GitHubClient:
                 codeowners = conn.root.codeowners
                 if repo_key not in codeowners:
                     try:
-                        codeowner_file = pull_request.repository.file_contents("CODEOWNERS")
+                        codeowner_file = pull_request.repository.file_contents(
+                            "CODEOWNERS"
+                        )
                         codeowner_file_contents = codeowner_file.decoded.decode()
                         codeowners[repo_key] = self.parse_codeowners_file(
                             codeowner_file_contents
@@ -328,21 +328,31 @@ class GitHubClient:
                 new = notif_id not in conn.root.notifications
             if new:
                 parsed = self._parse_notification(notification, prs_by_url)
-                with self.db.transaction() as conn:
-                    conn.root.notifications[notif_id] = parsed
-                if self._should_notify(parsed):
-                    self._notify(
-                        title="New Notification",
-                        message=notification.subject["title"],
-                        open=parsed["pr_url"],
-                    )
             else:
                 with self.db.transaction() as conn:
+                    parsed = conn.root.notifications[notif_id]
                     if conn.root.notifications[notif_id]["cleared"]:
                         notification.mark()
-                associated_pr = prs_by_url.get(notification.subject["url"])
-                if associated_pr:
-                    self.current_prs.add(associated_pr["id"])
+
+            corresponding_pr = prs_by_url.get(notification.subject["url"])
+            if (
+                corresponding_pr is None
+                or corresponding_pr["id"] not in self.current_prs
+            ) and parsed["type"] == "PullRequest":
+                corresponding_pr = self._parse_pr_from_notification(notification)
+            parsed["pr_id"] = corresponding_pr["id"] if corresponding_pr else None
+            parsed["pr_url"] = (
+                corresponding_pr["browser_url"] if corresponding_pr else None
+            )
+            if new and self._should_notify(parsed):
+                self._notify(
+                    title="New Notification",
+                    message=f"\{notification.subject['title']}",
+                    open=parsed["pr_url"],
+                )
+
+            with self.db.transaction() as conn:
+                conn.root.notifications[notif_id] = parsed
 
     def update(self):
         self.current_notifications = {}
@@ -387,40 +397,44 @@ class GitHubClient:
 
     def get_pr_codeowners(self, pr, reviews):
         all_owners = {}
-        for file in pr.files():
-            with self.db.transaction() as conn:
-                codeowner_info = conn.root.codeowners.get(
-                    f"{pr.repository.owner.login}|{pr.repository.name}"
-                )
-            if codeowner_info:
+        with self.db.transaction() as conn:
+            codeowner_info = conn.root.codeowners.get(
+                f"{pr.repository.owner.login}|{pr.repository.name}"
+            )
+        if codeowner_info:
+            for file in pr.files():
+                file_owners = None
                 for path, owners in codeowner_info:
+                    if path == "*":
+                        file_owners = owners
                     if path in f"/{file.filename}":
-                        if owners not in all_owners:
-                            approved = False
-                            if reviews:
-                                for owner in owners:
-                                    if "/" in owner:
-                                        with self.db.transaction() as conn:
-                                            if any(
-                                                user
-                                                in conn.root.team_members.get(
-                                                    pr.repository.owner.login, {}
-                                                ).get(owner, ())
-                                                and review["state"] == "APPROVED"
-                                                for user, review in reviews.items()
-                                            ):
-                                                approved = True
-                                                break
-                                    else:
-                                        if any(
-                                            user == owner
-                                            and review["state"] == "APPROVED"
-                                            for user, review in reviews.items()
-                                        ):
-                                            approved = True
-                                            break
+                        file_owners = owners
+                if file_owners and file_owners not in all_owners:
+                    approved = False
+                    if reviews:
+                        for owner in file_owners:
+                            if "/" in owner:
+                                with self.db.transaction() as conn:
+                                    if any(
+                                        user
+                                        in conn.root.team_members.get(
+                                            pr.repository.owner.login, {}
+                                        ).get(owner, ())
+                                        and review["state"] == "APPROVED"
+                                        for user, review in reviews.items()
+                                    ):
+                                        approved = True
+                                        break
+                            else:
+                                if any(
+                                    user == owner
+                                    and review["state"] == "APPROVED"
+                                    for user, review in reviews.items()
+                                ):
+                                    approved = True
+                                    break
 
-                            all_owners["|".join(owners)] = approved
+                    all_owners["|".join(file_owners)] = approved
         return all_owners
 
     def parse_reviews(self, pull_request):
@@ -457,7 +471,9 @@ class GitHubClient:
             "last_modified": pull_request.last_modified,
             "repo": pull_request.repository.name,
             "org": pull_request.repository.owner.login,
-            "protected": self.protection.get(pull_request.base.ref, {}).get("enabled", False),
+            "protected": self.protection.get(pull_request.base.ref, {}).get(
+                "enabled", False
+            ),
             "title": pull_request.title,
             "number": pull_request.number,
         }
@@ -468,7 +484,11 @@ class GitHubClient:
         )
         parsed["owners"] = self.get_pr_codeowners(pull_request, reviews)
 
-        if previous and parsed["author"] == self.CONFIG["user"] and parsed["test_status"]:
+        if (
+            previous
+            and parsed["author"] == self.CONFIG["user"]
+            and parsed["test_status"]
+        ):
             self._state_change_notification(parsed, previous)
         return parsed
 
