@@ -325,7 +325,10 @@ class BitBarRenderer(Renderer):
             self._printer(f"Title: {pull_request['title']}", indent=1)
             self._printer(f"Number: {pull_request['number']}", indent=1)
             self._printer(f"Base: {pull_request['base']}", indent=1)
-            self._printer(f"Last modified: {pull_request['last_modified']}", indent=1)
+            self._printer(
+                f"Updated: {pull_request['updated_at'].to('local').format(CONFIG['date_format'])}",
+                indent=1,
+            )
             self._section_break(indent=1)
             self._printer(
                 f"Mute PR",
@@ -432,6 +435,16 @@ class BitBarRenderer(Renderer):
                         )
                         self._printer(
                             self.state["pull_requests"][pr_id]["description"], indent=1
+                        )
+                        self._printer(
+                            self.state["notifications"][notif_id]["updated_at"]
+                            .to("local")
+                            .format(CONFIG["date_format"]),
+                            indent=1,
+                        )
+                        self._printer(
+                            f"Reason: {self.state['notifications'][notif_id]['reason']}",
+                            indent=1,
                         )
                         self._section_break(indent=1)
                         self._printer(
@@ -543,6 +556,7 @@ class BitBarRenderer(Renderer):
             self._printer(
                 f"{GLYPHS['na']}: NA  {GLYPHS['in_progress']}: PENDING", indent=2
             )
+            self._printer(f"{GLYPHS['cancelled']}: CANCELLED", indent=2)
             self._printer(
                 "Force refresh", indent=1, bash=self._get_gmb(), param1="refresh"
             )
@@ -556,9 +570,7 @@ class BitBarRenderer(Renderer):
             self._section_break(indent=1)
             self._printer(f"Server PID: {self.PID}", indent=1)
             if self.state["last_update"]:
-                update_time = datetime.strftime(
-                    datetime.utcfromtimestamp(self.state["last_update"]), "%H:%M:%S"
-                )
+                update_time = self.state["last_update"].to("local").format(CONFIG["date_format"])
             else:
                 update_time = "None"
-            self._printer(f"Last update (UTC): {update_time}", indent=1)
+            self._printer(f"Last update: {update_time}", indent=1)

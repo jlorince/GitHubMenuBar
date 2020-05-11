@@ -8,6 +8,7 @@ CONFIG = {
     "log_file": "/tmp/github_menubar.log",
     "state_path": f"{os.path.expanduser('~')}/.github_menubar.state.json",
     "db_location": f"{os.path.expanduser('~')}/.github_menubar/db",
+    "date_format": "ddd, YYYY-MM-DD HH:mm:ss"
 }
 
 # https://www.reddit.com/r/asciiart/comments/ai0787/fuck_yeah_im_a_trex/
@@ -27,10 +28,10 @@ GLYPHS = {
     "in_progress": "\uf10c",  # 
     "success": "\uf058",  # 
     "error": "\uf06a",  # 
-    "na": "\uf876",  #  
+    "na": "\uf876",  # 
     "comment": "\uf679",  # 
     "approval": "\uf67e",  # 
-    "cancelled": "\ufc38",  # ﰸ
+    "cancelled": "\uf659",  # 
     "change_request": "\uf67c",  # 
 }
 

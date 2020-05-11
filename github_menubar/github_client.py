@@ -7,6 +7,7 @@ import time
 import webbrowser
 
 from apscheduler.schedulers.background import BackgroundScheduler
+import arrow
 import github3
 from github3.exceptions import ForbiddenError, NotFoundError
 import psutil
@@ -237,7 +238,7 @@ class GitHubClient:
         if self.CONFIG["desktop_notifications"]:
             pync.notify(**kwargs)
 
-    def _parse_notification(self, notification, prs_by_url):
+    def _parse_notification(self, notification):
         notif = notification.subject.copy()
         comment_url = notif.get("latest_comment_url", "")
         if comment_url and "comments" in comment_url:
@@ -245,6 +246,8 @@ class GitHubClient:
                 self._client._get(comment_url).content.decode()
             )
         notif["cleared"] = False
+        notif["reason"] = notification.reason
+        notif["updated_at"] = arrow.get(notification.updated_at)
         return notif
 
     def _parse_pr_from_notification(self, notification):
@@ -327,7 +330,7 @@ class GitHubClient:
             with self.db.transaction() as conn:
                 new = notif_id not in conn.root.notifications
             if new:
-                parsed = self._parse_notification(notification, prs_by_url)
+                parsed = self._parse_notification(notification)
             else:
                 with self.db.transaction() as conn:
                     parsed = conn.root.notifications[notif_id]
@@ -373,7 +376,7 @@ class GitHubClient:
                 if pr["id"] in self.current_prs
             }
         with self.db.transaction() as conn:
-            conn.root.last_update = time.time()
+            conn.root.last_update = arrow.now()
         self.db.pack()
 
     def parse_codeowners_file(self, file_contents):
@@ -464,11 +467,10 @@ class GitHubClient:
             "url": pull_request.url,
             "browser_url": pull_request.html_url,
             "author": pull_request.user.login,
-            "updated_at": str(pull_request.updated_at),
+            "updated_at": arrow.get(pull_request.updated_at),
             "reviews": reviews,
             "muted": previous.get("muted", False),
             "id": pull_request.id,
-            "last_modified": pull_request.last_modified,
             "repo": pull_request.repository.name,
             "org": pull_request.repository.owner.login,
             "protected": self.protection.get(pull_request.base.ref, {}).get(

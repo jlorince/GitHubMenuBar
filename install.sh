@@ -30,7 +30,7 @@ if [ -n "$plugin_dir" ]; then
     mv "$plugin_dir/GitHubMenuBar.5s.py" ./GitHubMenuBar.5s.py.bak
     cp GitHubMenuBar.5s.py "$plugin_dir/"
 fi
-osascript -e 'open app "BitBar"'
+osascript -e 'activate app "BitBar"'
 
 
 

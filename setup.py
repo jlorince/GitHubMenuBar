@@ -10,6 +10,7 @@ setup(
     license="MIT",
     packages=["github_menubar"],
     install_requires=[
+        "arrow",
         "github3.py",
         "tabulate",
         "psutil",
@@ -18,7 +19,6 @@ setup(
         "ruamel.yaml",
         "ZEO",
         "ZODB"
-
     ],
     entry_points={"console_scripts": ["gmb=github_menubar.github_client:main"]},
     zip_safe=False,
