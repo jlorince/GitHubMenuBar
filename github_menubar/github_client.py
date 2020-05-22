@@ -56,6 +56,8 @@ class GitHubClient:
                 pid = int(fi.read().strip())
             if psutil.pid_exists(pid):
                 raise Exception("Server already running!")
+        with open(CONFIG["pid_file"], "w") as pidfile:
+            pidfile.write(str(os.getpid()))
         logging.info("Starting server...")
         config = load_config()
         ZEO.server(path=CONFIG["db_location"], port=config["port"])
@@ -68,8 +70,6 @@ class GitHubClient:
             next_run_time=datetime.datetime.now(),
         )
         sched.start()
-        with open(CONFIG["pid_file"], "w") as pidfile:
-            pidfile.write(str(os.getpid()))
         logging.info("server running")
         try:
             while True:

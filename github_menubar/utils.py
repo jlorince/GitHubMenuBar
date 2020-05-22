@@ -1,4 +1,7 @@
-from github_menubar.config import CONFIG, DEFAULT_CONFIG
+import os
+import plistlib
+
+from github_menubar.config import CONFIG, DEFAULT_CONFIG, PLIST_CONFIG
 
 import ruamel.yaml
 
@@ -33,7 +36,9 @@ def update_config(key, value, new=False):
     else:
         raise InvaldConfigKey
     yaml = ruamel.yaml.YAML()
-    yaml.dump(config, open(CONFIG["config_file_path"], 'w'))
+    yaml.dump(config, open(CONFIG["config_file_path"], "w"))
+    if key == "launch_on_startup":
+        configure_plist()
 
 
 def upgrade_config():
@@ -46,6 +51,17 @@ def upgrade_config():
     for key, value in existing_config.items():
         if key in default_config:
             default_config[key] = value
-    yaml.dump(default_config, open(CONFIG["config_file_path"], 'w'))
+    yaml.dump(default_config, open(CONFIG["config_file_path"], "w"))
 
+
+def configure_plist():
+    config = load_config()
+    plist_config = PLIST_CONFIG
+    plist_config["Disabled"] = not config["launch_on_startup"]
+    plistlib.dump(
+        plist_config,
+        open(
+            os.path.expanduser(f"~/Library/LaunchAgents/{plist_config['Label']}"), "wb"
+        ),
+    )
 

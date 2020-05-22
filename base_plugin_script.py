@@ -9,19 +9,23 @@ from github_menubar.github_client import load_config
 
 
 def startProcess():
-    print(
-        f"{GLYPHS['github_logo']} GMB not running |{CONFIG['font_large']}"
-    )
+    print(f"{GLYPHS['github_logo']} {GLYPHS['error']} |{CONFIG['font_large']}")
     print("---")
-    print(f"Click to start server |{CONFIG['font_large']} bash={sys.executable.rsplit('/', 1)[0]}/gmb param1=&")
-
+    print(
+        'Click to start server |{} bash="/bin/bash" param1="-c" param2="launchctl load -F {}" terminal=false refresh=true'.format(
+            CONFIG["font_large"],
+            CONFIG['plist_path']
+        )
+    )
 
 def setup():
     with open(CONFIG["config_file_path"], "w") as f:
         f.write(DEFAULT_CONFIG)
-    print(f"{GLYPHS['github_logo']} |{CONFIG['font_large']}")
+    print(f"{GLYPHS['github_logo']} {GLYPHS['error']}|{CONFIG['font_large']}")
     print("---")
-    print(f"Click to setup GitHubMenuBar |{CONFIG['font_large']} bash=nano param1={CONFIG['config_file_path']}")
+    print(
+        f"Click to setup GitHubMenuBar |{CONFIG['font_large']} bash=nano param1={CONFIG['config_file_path']}"
+    )
 
 
 def main(argv):

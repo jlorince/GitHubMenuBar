@@ -1,14 +1,27 @@
 import os
+import sys
 
 CONFIG = {
     "font": "font='Hack Regular Nerd Font Complete' size=13",
     "font_large": "font='Hack Regular Nerd Font Complete' size=14",
     "pid_file": "/tmp/github_menubar.pid",
     "config_file_path": f"{os.path.expanduser('~')}/.github_menubar.config.yaml",
-    "log_file": "/tmp/github_menubar.log",
-    "state_path": f"{os.path.expanduser('~')}/.github_menubar.state.json",
+    "base_dir": os.path.expanduser("~/.github_menubar"),
     "db_location": f"{os.path.expanduser('~')}/.github_menubar/db",
-    "date_format": "ddd, YYYY-MM-DD HH:mm:ss"
+    "date_format": "ddd, YYYY-MM-DD HH:mm:ss",
+    "plist_path": os.path.expanduser(
+        "~/Library/LaunchAgents/com.githubmenubar.daemon.plist"
+    ),
+}
+
+PLIST_CONFIG = {
+    "Label": "com.githubmenubar.daemon.plist",
+    "StandardErrorPath": f"{CONFIG['base_dir']}/stderr.log",
+    "StandardOutPath": f"{CONFIG['base_dir']}/stdout.log",
+    "ProgramArguments": [f"{sys.executable.rsplit('/', 1)[0]}/gmb"],
+    "WorkingDirectory": CONFIG["base_dir"],
+    "RunAtLoad": True,
+    "Disabled": True,
 }
 
 # https://www.reddit.com/r/asciiart/comments/ai0787/fuck_yeah_im_a_trex/
@@ -61,6 +74,8 @@ collapsed: false
 port: 9999
 # PR description format string
 format_string_v2: "{org}/{repo}: {title}"
+# Should GMB auto-launch on startup?
+launch_on_startup: false
 
 # CHANGING ANY SETTING BELOW THIS LINE IS NOT RECOMMENDED
 

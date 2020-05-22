@@ -484,7 +484,7 @@ class BitBarRenderer(Renderer):
             self._section_break()
             self._printer("Options")
             self._printer(
-                f"{'Disable' if self.CONFIG['mentions_only'] else 'Enable'} mentions only mode",
+                f"{GLYPHS['success'] if self.CONFIG['mentions_only'] else GLYPHS['in_progress']} Mentions only mode",
                 indent=1,
                 bash=self._get_gmb(),
                 param1="config",
@@ -494,7 +494,7 @@ class BitBarRenderer(Renderer):
             )
             if self.CONFIG["mentions_only"]:
                 self._printer(
-                    f"{'Disable' if self.CONFIG['team_mentions'] else 'Enable'} team mentions",
+                    f"{GLYPHS['success'] if self.CONFIG['team_mentions'] else GLYPHS['in_progress']} Team mentions",
                     indent=1,
                     bash=self._get_gmb(),
                     param1="config",
@@ -503,7 +503,7 @@ class BitBarRenderer(Renderer):
                     refresh=True,
                 )
             self._printer(
-                f"{'Expand' if self.CONFIG['collapsed'] else 'Collapse'} MenuBar icons",
+                f"{GLYPHS['success'] if self.CONFIG['collapsed'] else GLYPHS['in_progress']} Collapse MenuBar icons",
                 indent=1,
                 bash=self._get_gmb(),
                 param1="config",
@@ -512,12 +512,21 @@ class BitBarRenderer(Renderer):
                 refresh=True,
             )
             self._printer(
-                f"{'Disable' if self.CONFIG['desktop_notifications'] else 'Enable'} desktop notifications",
+                f"{GLYPHS['success'] if self.CONFIG['desktop_notifications'] else GLYPHS['in_progress']} Desktop notifications",
                 indent=1,
                 bash=self._get_gmb(),
                 param1="config",
                 param2="desktop_notifications",
                 param3=not self.CONFIG["desktop_notifications"],
+                refresh=True,
+            )
+            self._printer(
+                f"{GLYPHS['success'] if self.CONFIG['launch_on_startup'] else GLYPHS['in_progress']} Launch on login",
+                indent=1,
+                bash=self._get_gmb(),
+                param1="config",
+                param2="launch_on_startup",
+                param3=not self.CONFIG["launch_on_startup"],
                 refresh=True,
             )
             self._section_break(indent=1)
@@ -563,9 +572,10 @@ class BitBarRenderer(Renderer):
             self._printer(
                 "Kill server",
                 indent=1,
-                bash="kill",
-                param1=self.PID,
-                open_terminal=True,
+                bash="/bin/bash",
+                param1="-c",
+                param2="'launchctl unload {}'".format(CONFIG['plist_path']),
+                open_terminal=False,
             )
             self._section_break(indent=1)
             self._printer(f"Server PID: {self.PID}", indent=1)

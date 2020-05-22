@@ -4,6 +4,7 @@ PID_FILE=/tmp/github_menubar.pid
 if test -f $PID_FILE; then
     kill $(cat $PID_FILE)
 fi
+launchctl unload ~/Library/LaunchAgents/com.githubmenubar.daemon.plist
 rm -rf ~/.github_menubar
 mkdir ~/.github_menubar
 
@@ -13,7 +14,7 @@ brew cask install font-hack-nerd-font
 brew install terminal-notifier
 
 pip install --upgrade .
-python -c "from github_menubar.utils import upgrade_config; upgrade_config()"
+python -c "from github_menubar.utils import upgrade_config, configure_plist; upgrade_config(); configure_plist()"
 
 shebang="#!/usr/bin/env PYTHONIOENCODING=UTF-8 "
 if [ -n "$PYENV_VERSION" ]; then
